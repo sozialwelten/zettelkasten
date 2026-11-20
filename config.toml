@@ -1,7 +1,7 @@
 # Konfiguration des Zettelkasten-Werkzeugs
 
 [pfade]
-exporte = "/mnt/daten/mastodon"          # <konto>/<datum>/<archiv>.zip
+exporte = "/home/apollon/Nextcloud/Backups/ifwo_mastodon"          # <konto>/<datum>/<archiv>.zip
 daten = "/mnt/daten/zettelkasten"        # Zwischenstände, Abschriften, Probe
 vault = "/home/apollon/Nextcloud/Wolkenstadt/Dokumente/Arbeitsorganisation/Zettelkasten"
 

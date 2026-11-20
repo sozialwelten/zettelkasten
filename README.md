@@ -40,10 +40,13 @@ python3 -m venv .venv
 
 ## Ablage der Exporte
 
-Die Exporte aus Mastodon (Einstellungen, Import und Export, Daten-Export) liegen als Zip-Archive unter
+Die Exporte aus Mastodon (Einstellungen, Import und Export, Daten-Export) liegen als Zip-Archive in dem Ordner, den `[pfade] exporte` in `config.toml` nennt. Namen und Unterordner sind frei. `exporte.py` erkennt einen Export an `outbox.json` und `actor.json`, liest das Konto aus `actor.json` und nimmt je Konto den jüngsten Export. Andere Zip-Dateien im selben Ordner stören nicht.
+
+Ein neuer Export ersetzt den alten. Vorher zeigt `exporte_pruefen.py`, ob im alten Export Beiträge oder Bilder stehen, die im neuen fehlen, etwa weil sie inzwischen gelöscht sind:
 
 ```
-/mnt/daten/mastodon/<konto>/<datum>/<archiv>.zip
+python3 exporte_pruefen.py ORDNER [ORDNER ...]          ältere gegen den neuesten Export je Konto
+python3 exporte_pruefen.py ALT.zip NEU.zip --liste      alle Beiträge, die nur im alten stehen
 ```
 
 ## Einheiten

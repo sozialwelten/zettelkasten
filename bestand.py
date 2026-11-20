@@ -1,11 +1,11 @@
 """Bestand aller Mastodon-Exporte zählen, direkt aus den Zip-Archiven.
 
 Aufruf:
-  python3 bestand.py                       den jeweils neuesten Export jedes Kontos unter /mnt/daten/mastodon
+  python3 bestand.py                       den jeweils neuesten Export jedes Kontos unter [pfade] exporte
   python3 bestand.py ARCHIV.zip [...]      nur diese Archive
   python3 bestand.py --jahre               zusätzlich die Tabelle nach Jahren je Konto
 
-Erwartete Ablage: /mnt/daten/mastodon/<konto>/<datum>/<archiv>.zip
+Die Exporte dürfen beliebig heißen und in Unterordnern liegen (siehe exporte.py).
 Liest nur, ändert nichts, packt nichts aus.
 
 Gezählt wird je Konto:
@@ -20,11 +20,14 @@ Gezählt wird je Konto:
 
 import json
 import sys
+import tomllib
 import zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 
-WURZEL = Path("/mnt/daten/mastodon")
+from exporte import neueste_exporte
+
+PROJEKT = Path(__file__).resolve().parent
 OEFFENTLICH = "https://www.w3.org/ns/activitystreams#Public"
 SPALTEN = ["Beiträge", "Zettel", "ohne Hashtag", "an andere", "direkt", "Bilder"]
 
@@ -41,15 +44,9 @@ def sichtbarkeit(obj):
 
 
 def neueste_archive():
-    archive = []
-    for konto in sorted(p for p in WURZEL.iterdir() if p.is_dir()):
-        staende = sorted(p for p in konto.iterdir() if p.is_dir())
-        zips = sorted(staende[-1].glob("*.zip")) if staende else []
-        if zips:
-            archive.append(zips[-1])
-        else:
-            print(f"  {konto.name}: kein Archiv gefunden")
-    return archive
+    with open(PROJEKT / "config.toml", "rb") as datei:
+        wurzel = tomllib.load(datei)["pfade"]["exporte"]
+    return neueste_exporte(wurzel)
 
 
 def zaehle(archiv):

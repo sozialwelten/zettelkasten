@@ -6,6 +6,8 @@ Aufruf:
   python3 einlesen.py ARCHIV.zip       nur dieses Archiv
 
 Liest nur aus den Zip-Archiven, packt nichts aus und schreibt nicht in den Vault.
+Welche Archive: je Konto der jüngste Mastodon-Export unter [pfade] exporte, gleich wie die
+Dateien heißen oder in welchen Unterordnern sie liegen (siehe exporte.py).
 Die Probe kopiert für ihre Beispielnotizen die Bilder mit nach DATEN/probe/Zubehör/.
 
 Eine Einheit ist das, was später eine Notiz wird:
@@ -32,6 +34,8 @@ from datetime import datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+from exporte import neueste_exporte
 
 PROJEKT = Path(__file__).resolve().parent
 ANHAENGE = "Zubehör"  # Ordner für Bilder im Vault; der Name sortiert ihn hinter die Bereiche
@@ -305,16 +309,6 @@ def schreibe_probe(einheiten, ordner, anzahl):
     return sum(len(v) for v in gewaehlt.values())
 
 
-def neueste_archive(wurzel):
-    archive = []
-    for konto in sorted(p for p in wurzel.iterdir() if p.is_dir()):
-        staende = sorted(p for p in konto.iterdir() if p.is_dir())
-        zips = sorted(staende[-1].glob("*.zip")) if staende else []
-        if zips:
-            archive.append(zips[-1])
-    return archive
-
-
 def main():
     parser = argparse.ArgumentParser(description="Mastodon-Exporte einlesen und gruppieren")
     parser.add_argument("archive", nargs="*", type=Path, help="nur diese Archive")
@@ -324,11 +318,11 @@ def main():
     konf = lade_konfiguration()
     daten = Path(konf["pfade"]["daten"])
     daten.mkdir(parents=True, exist_ok=True)
-    archive = args.archive or neueste_archive(Path(konf["pfade"]["exporte"]))
+    archive = args.archive or neueste_exporte(konf["pfade"]["exporte"])
 
     alle = []
     for archiv in archive:
-        print(f"lese {archiv.parent.parent.name} …", file=sys.stderr, flush=True)
+        print(f"lese {archiv.name} …", file=sys.stderr, flush=True)
         konto, einheiten = lies_archiv(archiv, konf["bereiche"])
         alle += einheiten
         arten = Counter(e["art"] for e in einheiten)

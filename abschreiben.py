@@ -105,7 +105,8 @@ def frage_bildmodell(konf, bild_b64):
         },
         timeout=600,
     )
-    antwort.raise_for_status()
+    if not antwort.ok:
+        raise RuntimeError(f"Ollama meldet {antwort.status_code}: {antwort.text[:300]}")
     inhalt = antwort.json()["message"].get("content", "")
     try:
         ergebnis = json.loads(inhalt)
@@ -147,10 +148,17 @@ def main():
     ziel = daten / "abschriften"
     ziel.mkdir(parents=True, exist_ok=True)
     bilder = bilder_der_reihe_nach(daten, einst["reihenfolge"])
-    offen = [b for b in bilder if not (ziel / f"{b[0]}.json").exists()]
+    fehler_pfad = daten / "abschrift-fehler.json"
+    fehler = json.loads(fehler_pfad.read_text(encoding="utf-8")) if fehler_pfad.exists() else {}
+    offen = [b for b in bilder if not (ziel / f"{b[0]}.json").exists()
+             and fehler.get(b[0], {}).get("versuche", 0) < 2]
+    if fehler:
+        print(f"Bilder mit Fehlern: {len(fehler)}, davon nach zwei Versuchen ausgelassen: "
+              f"{sum(1 for f in fehler.values() if f['versuche'] >= 2)} (Liste in {fehler_pfad})")
 
     stand = Counter(b[3] for b in offen)
-    print(f"{len(bilder)} Bilder, {len(bilder) - len(offen)} abgeschrieben, {len(offen)} offen: "
+    fertig = sum(1 for b in bilder if (ziel / f"{b[0]}.json").exists())
+    print(f"{len(bilder)} Bilder, {fertig} abgeschrieben, {len(offen)} offen: "
           + ", ".join(f"{bereich} {n}" for bereich, n in stand.most_common()))
     if args.stand or not offen:
         return
@@ -165,7 +173,7 @@ def main():
     stoppdatei = daten / "stopp"
     stoppdatei.unlink(missing_ok=True)
     ende = time.monotonic() + args.minuten * 60 if args.minuten else None
-    erledigt, sekunden, beispiele = 0, 0.0, []
+    erledigt, sekunden, beispiele, hintereinander = 0, 0.0, [], 0
     archive = {}
     try:
         for name, archiv, datei, bereich, _ in offen:
@@ -185,7 +193,23 @@ def main():
             if bild_b64 is None:
                 (ziel / f"{name}.json").write_text(json.dumps({"uebersprungen": "animiert"}), encoding="utf-8")
                 continue
-            ergebnis = frage_bildmodell(konf, bild_b64)
+            try:
+                ergebnis = frage_bildmodell(konf, bild_b64)
+            except (RuntimeError, requests.RequestException) as e1:
+                # Zweiter Versuch mit kleinerem Bild; scheitert auch der, wird das Bild vermerkt und übersprungen.
+                print(f"  Fehler bei {name}: {e1}; neuer Versuch mit 1000 Pixeln", flush=True)
+                try:
+                    ergebnis = frage_bildmodell(konf, verkleinert(archive[archiv].read(datei), 1000))
+                except (RuntimeError, requests.RequestException) as e2:
+                    eintrag = fehler.setdefault(name, {"versuche": 0, "datei": datei, "bereich": bereich})
+                    eintrag.update(versuche=eintrag["versuche"] + 1, meldung=str(e2)[:300])
+                    fehler_pfad.write_text(json.dumps(fehler, ensure_ascii=False, indent=1), encoding="utf-8")
+                    hintereinander += 1
+                    if hintereinander >= 5:
+                        print("Fünf Fehler hintereinander, Lauf beendet. Läuft Ollama noch?")
+                        break
+                    continue
+            hintereinander = 0
             ergebnis.update(modell=konf["ollama"]["bildmodell"], bereich=bereich, datei=datei)
             (ziel / f"{name}.json").write_text(json.dumps(ergebnis, ensure_ascii=False, indent=1), encoding="utf-8")
             erledigt += 1
