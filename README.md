@@ -6,7 +6,15 @@ Alles läuft auf einem eigenen Rechner. Kein Text und kein Bild geht an einen ex
 
 ## Stand
 
-Bestandsaufnahme, Einlesen und die Abschrift der Bilder sind gebaut. Das Einlesen gruppiert die Beiträge zu Einheiten, aus denen später je eine Notiz wird, und schreibt auf Wunsch Beispielnotizen zur Ansicht. Abschrift der Bilder, Zuordnung der Bereiche, Hashtags und das Schreiben in den Vault folgen.
+Gebaut sind alle Stufen bis zum Vault:
+
+1. `bestand.py` zählt, was in den Exporten steckt.
+2. `einlesen.py` gruppiert die Beiträge zu Einheiten, aus denen je eine Notiz wird, und bereinigt den Text.
+3. `abschreiben.py` schreibt die Bilder mit dem Bildmodell ab.
+4. `anreichern.py` lässt das Sprachmodell Titel, Bereich, zusätzliche Hashtags und eine Lesefassung vorschlagen und prüft sie.
+5. `schreiben.py` schreibt fertige Einheiten als Notizen in den Vault.
+
+Noch nicht gebaut: Querverweise, Colloquium-Notizen, Zufallsfunde.
 
 Der Vault bekommt nur fertige Notizen. Erst wenn eine Einheit abgeschrieben, zugeordnet und verschlagwortet ist, wird sie geschrieben, und danach rührt das Programm sie nicht mehr an.
 
@@ -61,7 +69,14 @@ python3 einlesen.py --probe 3         zusätzlich je Bereich und Art 3 Beispieln
 .venv/bin/python abschreiben.py --stand           zählen, was abgeschrieben und was offen ist
 .venv/bin/python abschreiben.py --hoechstens 20   20 Bilder abschreiben, drei Beispiele zeigen
 .venv/bin/python abschreiben.py --minuten 120     zwei Stunden lang abschreiben
+.venv/bin/python anreichern.py --stand            zählen, was angereichert, bereit und wartend ist
+.venv/bin/python anreichern.py --hoechstens 10    10 Einheiten anreichern und die Ergebnisse zeigen
+.venv/bin/python anreichern.py --minuten 120      zwei Stunden lang anreichern
+.venv/bin/python schreiben.py --probe 3           je Bereich 3 Notizen in einen Probe-Vault
+.venv/bin/python schreiben.py                     alle fertigen Einheiten in den Vault schreiben
 ```
+
+Das Modell sieht keine Zeilen, die in sehr vielen Abschriften gleich vorkommen, etwa Folienköpfe. Vorgeschlagene Hashtags bleiben nur, wenn sie im Text oder in einer Abschrift vorkommen. Eine Lesefassung mit Zahlen, die im Zettel nicht stehen, wird verworfen.
 
 Die Abschrift schreibt je Bild eine JSON-Datei nach `DATEN/abschriften/` und macht beim nächsten Aufruf dort weiter. Anhalten mit der Datei `DATEN/stopp`, nach dem laufenden Bild. Zwischen zwei Bildern wartet sie, wenn eine Grafikkarte zu heiß wird.
 

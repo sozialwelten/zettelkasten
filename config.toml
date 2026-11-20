@@ -24,3 +24,17 @@ kante = 1500                             # Bilder vorher auf diese Kantenlänge 
 reihenfolge = ["Soziologie", "Analytics", "Verein", "Waldbau", "Hauptbuch", "offen", "Oikos", "Gespräch", "Gespräch/Direkt"]
 temperatur_pause = 83
 temperatur_weiter = 70
+
+[anreicherung]
+kopfzeile_ab = 25                        # Zeilen, die in so vielen Abschriften gleich vorkommen, sieht das Modell nicht
+
+# Bereiche für Zettel aus @sozialwelten, mit der Beschreibung, die das Modell bekommt
+[anreicherung.bereiche]
+Hauptbuch = "Buchhaltung, Bilanzbuchhaltung, DATEV, Steuern, Kaufmännisches, Hotellerie, Beruf und Berufsausbildung; auch Rechtsfragen der Berufspraxis wie Arbeitsvertragsrecht, Handelsrecht, HGB und Steuerrecht"
+Analytics = "Programmierung, KI, SQL, Python, Data Analytics, quantitative Sozialwissenschaft"
+Soziologie = "Soziologie und Gesellschaftstheorie im akademischen Sinn, etwa Systemtheorie, Luhmann, Baecker, Mauss, Gabe, Kommunikation; Studium der Sozialökonomie; das Fediverse als Forschungsgegenstand"
+Verein = "Vereinswesen und Vereinsrecht, Anoxinon, c-base, CCC, Demos, Ehrenamt, Betrieb von Fediverse-Instanzen und Infrastruktur"
+Waldbau = "Jagd, Jagdschein, Waffenkunde, Natur, Bäume, Pilze, Kräuter"
+Oikos = "Persönliches, Termine, Wohnen, Ausflüge, Konsum, Freizeit, Reisen, persönliche Reflexion und Planung"
+Recht = "juristische Grundlagen aus dem Jurastudium: Zivilrecht, Römische Rechtsgeschichte, Öffentliches Recht und Grundrechte, Strafrecht, Rechtsphilosophie, Rechtsgeschichte"
+ungeordnet = "passt in keinen der anderen Bereiche sicher"

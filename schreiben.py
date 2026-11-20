@@ -1,0 +1,145 @@
+"""Fertig angereicherte Einheiten als Notizen in den Vault schreiben.
+
+Aufruf:
+  .venv/bin/python schreiben.py --probe 3         je Bereich 3 Notizen nach DATEN/probe-vault/, der Vault bleibt unberührt
+  .venv/bin/python schreiben.py                   alle fertigen Einheiten in den Vault schreiben
+  .venv/bin/python schreiben.py --stand           nur zählen
+
+Fertig ist eine Einheit, wenn sie angereichert ist (anreichern.py). Geschrieben wird jede Einheit genau einmal.
+Welche Datei zu welcher Einheit gehört, steht in DATEN/geschrieben.json. Eine geschriebene Notiz rührt das
+Programm nie wieder an, auch wenn sie inzwischen von Hand geändert ist. Fehlt sie, weil sie gelöscht wurde,
+wird sie auch nicht neu angelegt.
+
+Aufbau einer Notiz:
+  Kopfzeile: Bereich, Konto, Datum oder Zeitraum, Link zum Original; bei Gesprächen „Mit:“
+  meine Beiträge, bei mehreren mit Datum und Uhrzeit; darunter je Bild das Bild und die Abschrift als Zitat
+  die Lesefassung, abgesetzt durch eine Linie
+  die Hashtags: zuerst meine, dann die vom Modell ergänzten
+
+Dateiname: der Titel aus der Anreicherung. Gibt es ihn im Bereich schon, kommt das Datum dazu.
+Das Änderungsdatum jeder Notiz wird auf das Datum des ersten Beitrags gesetzt, damit Obsidian auch
+chronologisch sortieren kann. Bilder kommen einmal nach Zubehör/ im Vault.
+"""
+
+import argparse
+import json
+import os
+import re
+import zipfile
+from collections import Counter, defaultdict
+from datetime import datetime
+from pathlib import Path
+
+from abschreiben import lade_konfiguration
+from anreichern import kopfzeilen, lies_abschriften, ohne_kopf
+from einlesen import ANHAENGE
+
+VERBOTEN = re.compile(r'[\\/:*?"<>|#^\[\]]')
+
+
+def dateiname(titel):
+    name = " ".join(VERBOTEN.sub(" ", titel).split()).strip(" .")
+    return name[:100] or "Ohne Titel"
+
+
+def als_notiz(einheit, anreicherung, abschriften, kopf):
+    bereich = anreicherung.get("bereich", einheit["bereich"])
+    beginn, ende = datetime.fromisoformat(einheit["von"]), datetime.fromisoformat(einheit["bis"])
+    zeitraum = f"{beginn:%d.%m.%Y}" + (f" bis {ende:%d.%m.%Y}" if ende.date() != beginn.date() else "")
+    zeilen = [" · ".join([bereich, f"@{einheit['konto']}", zeitraum, f"[Original]({einheit['beitraege'][0]['url']})"])]
+    if einheit["partner"]:
+        zeilen.append("Mit: " + ", ".join(f"[{p['name']}]({p['href']})" if p["href"] else p["name"]
+                                          for p in einheit["partner"]))
+    mehrere = len(einheit["beitraege"]) > 1
+    for b in einheit["beitraege"]:
+        zeilen.append("")
+        if mehrere:
+            zeilen += [f"**{datetime.fromisoformat(b['zeit']):%d.%m.%Y %H:%M}**", ""]
+        if b["inhaltswarnung"]:
+            zeilen += [f"Inhaltswarnung: {b['inhaltswarnung']}", ""]
+        if b["text"]:
+            zeilen.append(b["text"])
+        for bild in b["bilder"]:
+            name = Path(bild["datei"]).name
+            daten = abschriften.get(name, {})
+            zeilen += ["", f"![[{name}]]"]
+            if bild["beschreibung"]:
+                zeilen.append(f"Bildbeschreibung: {bild['beschreibung']}")
+            text = ohne_kopf(daten.get("abschrift", ""), kopf)
+            if text:
+                zeilen += [""] + [f"> {z}" for z in text.splitlines()]
+            elif daten.get("beschreibung") and not bild["beschreibung"]:
+                zeilen.append(f"Bild: {daten['beschreibung']}")
+    if anreicherung.get("lesefassung"):
+        zeilen += ["", "---", "", anreicherung["lesefassung"]]
+    hashtags = einheit["hashtags"] + anreicherung.get("hashtags_neu", [])
+    if hashtags:
+        zeilen += ["", " ".join("#" + re.sub(r"\s+", "", h) for h in hashtags)]
+    return bereich, "\n".join(zeilen) + "\n"
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Angereicherte Einheiten in den Vault schreiben")
+    parser.add_argument("--probe", type=int, metavar="N", help="je Bereich N Notizen in einen Probe-Vault")
+    parser.add_argument("--stand", action="store_true", help="nur zählen")
+    args = parser.parse_args()
+
+    konf = lade_konfiguration()
+    daten = Path(konf["pfade"]["daten"])
+    vault = daten / "probe-vault" if args.probe else Path(konf["pfade"]["vault"])
+    register_pfad = daten / "geschrieben.json"
+    register = {} if args.probe else (json.loads(register_pfad.read_text(encoding="utf-8"))
+                                      if register_pfad.exists() else {})
+    anreicherungen = {p.name.removesuffix(".json"): p for p in (daten / "anreicherung").glob("*.json")}
+    with open(daten / "einheiten.jsonl", encoding="utf-8") as f:
+        einheiten = [json.loads(z) for z in f]
+    fertig = [e for e in einheiten if e["kennung"] in anreicherungen and e["kennung"] not in register]
+    print(f"{len(einheiten)} Einheiten: {len(register)} geschrieben, {len(fertig)} fertig zum Schreiben")
+    if args.stand or not fertig:
+        return
+
+    abschriften = lies_abschriften(daten / "abschriften")
+    kopf = kopfzeilen(abschriften, konf["anreicherung"].get("kopfzeile_ab", 25))
+    je_bereich = Counter()
+    archive = {}
+    (vault / ANHAENGE).mkdir(parents=True, exist_ok=True)
+    geschrieben = defaultdict(int)
+    for einheit in sorted(fertig, key=lambda e: e["von"]):
+        anreicherung = json.loads(anreicherungen[einheit["kennung"]].read_text(encoding="utf-8"))
+        bereich, inhalt = als_notiz(einheit, anreicherung, abschriften, kopf)
+        if args.probe and je_bereich[bereich] >= args.probe:
+            continue
+        ordner = vault / bereich
+        ordner.mkdir(parents=True, exist_ok=True)
+        name = dateiname(anreicherung["titel"])
+        pfad = ordner / f"{name}.md"
+        if pfad.exists():
+            pfad = ordner / f"{name} ({datetime.fromisoformat(einheit['von']):%d.%m.%Y}).md"
+        nr = 2
+        while pfad.exists():
+            pfad = ordner / f"{name} ({datetime.fromisoformat(einheit['von']):%d.%m.%Y}) {nr}.md"
+            nr += 1
+        for b in einheit["beitraege"]:
+            for bild in b["bilder"]:
+                ziel = vault / ANHAENGE / Path(bild["datei"]).name
+                if not ziel.exists():
+                    if einheit["archiv"] not in archive:
+                        archive[einheit["archiv"]] = zipfile.ZipFile(einheit["archiv"])
+                    ziel.write_bytes(archive[einheit["archiv"]].read(bild["datei"]))
+        pfad.write_text(inhalt, encoding="utf-8")
+        zeit = datetime.fromisoformat(einheit["von"]).timestamp()
+        os.utime(pfad, (zeit, zeit))
+        je_bereich[bereich] += 1
+        geschrieben[bereich] += 1
+        if not args.probe:
+            register[einheit["kennung"]] = str(pfad.relative_to(vault))
+    for z in archive.values():
+        z.close()
+    if not args.probe:
+        register_pfad.write_text(json.dumps(register, ensure_ascii=False, indent=0), encoding="utf-8")
+    print(f"{sum(geschrieben.values())} Notizen nach {vault}: "
+          + ", ".join(f"{b} {n}" for b, n in sorted(geschrieben.items())))
+
+
+if __name__ == "__main__":
+    main()

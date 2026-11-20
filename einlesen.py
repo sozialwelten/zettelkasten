@@ -205,12 +205,12 @@ def lies_archiv(archiv, bereiche):
     gruppen = defaultdict(list)
     for b in beitraege.values():
         if b["sichtbarkeit"] == "direkt":
-            art = "direkt" if b["partner"] else "notiz"
+            art = "direkt-oder-notiz"   # ein Gespräch per Direktnachricht bleibt immer eine Einheit
         elif an_andere_kette(b):
             art = "antwort"
         else:
             art = "eigen"
-        gruppen[(b["gespraech"], art if art != "notiz" else "direkt-oder-notiz")].append(b)
+        gruppen[(b["gespraech"], art)].append(b)
 
     einheiten = []
     for (gespraech, art), teile in gruppen.items():
