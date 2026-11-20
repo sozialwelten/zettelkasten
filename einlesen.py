@@ -13,7 +13,7 @@ Eine Einheit ist das, was später eine Notiz wird:
   notiz    Direktnachricht ohne Erwähnung, also eine Notiz an mich selbst
   beitrag  eigener Beitrag oder Thread ohne Hashtags, öffentlich (Social Media)
   antwort  meine Antworten an andere in einem Gespräch
-  direkt   Gespräch per Direktnachricht mit anderen
+  direkt   Gespräch per Direktnachricht mit anderen, nur die Nachrichten mit Empfänger
 
 Bereich: bei den thematischen Konten vom Konto. Bei @sozialwelten gehen antwort und beitrag nach
 „Gespräch“, direkt nach „Gespräch/Direkt“. zettel und notiz aus @sozialwelten bekommen den Bereich
@@ -173,6 +173,7 @@ def lies_archiv(archiv, bereiche):
                    for t in obj.get("tag", []) if t.get("type") == "Mention"]
         bekannte = {p["name"].lstrip("@").split("@")[0].lower(): p["href"] for p in partner if p["href"]}
         text, hashtags, links, erwaehnt, klartext = zerlege(obj.get("content", ""), instanz, bekannte)
+        empfaenger = bool(partner)  # nur echte Erwähnungen machen eine Direktnachricht zum Gespräch
         bekannt = {p["name"].lstrip("@").split("@")[0].lower() for p in partner}
         partner += [p for p in klartext if p["name"].lstrip("@").split("@")[0].lower() not in bekannt]
         bilder, vorschauen = [], 0
@@ -190,7 +191,7 @@ def lies_archiv(archiv, bereiche):
             "an_andere": bool(antwort) and not str(antwort).startswith(ich),
             "gespraech": obj.get("conversation") or obj["id"],
             "text": text, "hashtags": hashtags, "links": links, "partner": partner,
-            "inhaltswarnung": obj.get("summary") or "", "bilder": bilder, "vorschauen": vorschauen,
+            "empfaenger": empfaenger, "inhaltswarnung": obj.get("summary") or "", "bilder": bilder, "vorschauen": vorschauen,
         }
 
     # Wurzel jedes Beitrags innerhalb der eigenen Beiträge: geht die Kette auf einen fremden Beitrag zurück,
@@ -205,7 +206,9 @@ def lies_archiv(archiv, bereiche):
     gruppen = defaultdict(list)
     for b in beitraege.values():
         if b["sichtbarkeit"] == "direkt":
-            art = "direkt-oder-notiz"   # ein Gespräch per Direktnachricht bleibt immer eine Einheit
+            # Eine Direktnachricht ohne Empfänger erreicht niemanden: Sie ist eine Notiz an mich selbst,
+            # auch mitten in einem Gespräch. Erwähnungen ohne Link zählen dabei nicht als Empfänger.
+            art = "direkt" if b["empfaenger"] else "notiz"
         elif an_andere_kette(b):
             art = "antwort"
         else:
@@ -215,9 +218,7 @@ def lies_archiv(archiv, bereiche):
     einheiten = []
     for (gespraech, art), teile in gruppen.items():
         teile.sort(key=lambda b: b["zeit"])
-        if art == "direkt-oder-notiz":
-            art = "direkt" if any(b["partner"] for b in teile) else "notiz"
-        elif art == "eigen":
+        if art == "eigen":
             art = "zettel" if any(b["hashtags"] for b in teile) else "beitrag"
         hashtags = list(dict.fromkeys(h for b in teile for h in b["hashtags"]))
         partner = list({p["name"]: p for b in teile for p in b["partner"]
