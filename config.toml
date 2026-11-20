@@ -1,0 +1,26 @@
+# Konfiguration des Zettelkasten-Werkzeugs
+
+[pfade]
+exporte = "/mnt/daten/mastodon"          # <konto>/<datum>/<archiv>.zip
+daten = "/mnt/daten/zettelkasten"        # Zwischenstände, Abschriften, Probe
+vault = "/home/apollon/Nextcloud/Wolkenstadt/Dokumente/Arbeitsorganisation/Zettelkasten"
+
+# Bereich je thematischem Konto (Benutzername ohne @). Zettel aus anderen Konten ordnet das Modell zu.
+[bereiche]
+hotelfachwesen = "Hauptbuch"
+analytics = "Analytics"
+soziologie = "Soziologie"
+verein = "Verein"
+waldbau = "Waldbau"
+oikos = "Oikos"
+
+[ollama]
+adresse = "http://localhost:11434"
+modell = "qwen3:32b"
+bildmodell = "bild30"                    # qwen3-vl:30b ohne Nachdenken
+
+[abschrift]
+kante = 1500                             # Bilder vorher auf diese Kantenlänge verkleinern
+reihenfolge = ["Soziologie", "Analytics", "Verein", "Waldbau", "Hauptbuch", "offen", "Oikos", "Gespräch", "Gespräch/Direkt"]
+temperatur_pause = 83
+temperatur_weiter = 70
