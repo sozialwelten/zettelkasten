@@ -38,6 +38,22 @@ def titel_fuer_datei(titel):
     return re.sub(r"\s*/\s*", ", ", titel).strip()
 
 
+def dateititel(nummer, titel):
+    """Notizname einer Karte: Nummer mit Punkt statt Schrägstrich, dann der Titel, etwa „2.4c1 Semantik“."""
+    return f"{nummer.replace('/', '.')} {titel_fuer_datei(titel)}".strip()
+
+
+def oberkarte(nummer):
+    """Nummer der übergeordneten Karte nach Luhmanns Ordnung: 2/4c1a1 → 2/4c1a → … → 2/4 → 2; 0a → 0."""
+    if "/" in nummer:
+        stamm, rest = nummer.split("/", 1)
+        if rest.isdigit():
+            return stamm
+        return stamm + "/" + re.sub(r"(\d+|[a-z]+)$", "", rest)
+    kuerzer = re.sub(r"[a-z]+$", "", nummer)
+    return kuerzer if kuerzer != nummer else ""
+
+
 def lies_karten(konf, daten):
     k = konf["karten"]
     ordner = Path(k["ordner"])
@@ -57,13 +73,13 @@ def lies_karten(konf, daten):
         einheiten.append({
             "kennung": f"karte-{k['konto']}-{nummer.replace('/', '-')}", "konto": k["konto"], "plattform": "karte",
             "archiv": str(ordner), "art": "zettel", "bereich": k["bereich"], "von": "", "bis": "",
-            "hashtags": [], "partner": [], "titel": titel_fuer_datei(karte["titel"] or nummer),
+            "hashtags": [], "partner": [], "titel": dateititel(nummer, karte["titel"] or ""),
             "karte": nummer, "verweise": karte.get("verweise", []), "getwittert": [],
             "herkunft": karte.get("herkunft", ""),
             "beitraege": [{"id": nummer, "url": "", "zeit": "", "sichtbarkeit": "", "antwort_auf": None,
                            "an_andere": False, "gespraech": "",
                            # spitze Klammern stehen für Spencer-Browns Haken; Obsidian soll sie nicht als HTML lesen
-                           "text": "\n\n".join(karte["abschrift"]).replace("<", "\\<"),
+                           "text": "\n".join(karte["abschrift"]).replace("<", "\\<"),
                            "hashtags": [], "links": [], "partner": [], "empfaenger": False, "inhaltswarnung": "",
                            "bilder": bilder, "vorschauen": 0}],
         })
@@ -81,8 +97,13 @@ def verbinde(alle, karten, konf):
         if e["konto"] in k.get("konten_mit_karten", []) and e["beitraege"]:
             m = NUMMER.match(e["beitraege"][0]["text"])
             if m and ("/" in m.group(1) or len(m.group(2).split()) <= 6):
+                # Karte, die schon als Zettel auf Mastodon steht: gehört in dieselbe Ordnung wie die Kartei
                 e.setdefault("karte", m.group(1))
                 e.setdefault("getwittert", [])
+                e["bereich"] = k["bereich"]
+                e["titel"] = dateititel(m.group(1), re.sub(r"#", "", m.group(2)).strip())
+                text = " ".join(b["text"] for b in e["beitraege"])
+                e["verweise"] = [v for v in re.findall(r"[Vv]gl\.?:?\s+(\d+/[0-9][0-9a-z]*)", text)]
                 ziele.setdefault(m.group(1), e)
                 nach_titel.setdefault(vergleich(m.group(2)), e)
 
@@ -118,4 +139,13 @@ def verbinde(alle, karten, konf):
     for e in ergebnis:
         if "getwittert" in e:
             e["getwittert"].sort()
+
+    # Links innerhalb der Kartei: Oberkarte nach der Nummer, Verweise aus den Vgl.-Zeilen
+    titel = {e["karte"]: e["titel"] for e in ergebnis + karten if e.get("karte") and e.get("titel")}
+    for e in ergebnis + karten:
+        if not e.get("karte"):
+            continue
+        oben = oberkarte(e["karte"])
+        e["oberkarte"] = titel.get(oben, "")
+        e["verweis_titel"] = [titel[v] for v in dict.fromkeys(e.get("verweise", [])) if v in titel]
     return ergebnis + karten, aufgegangen

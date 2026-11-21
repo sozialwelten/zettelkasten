@@ -24,7 +24,7 @@ oikos = "Oikos"
 ordner = "/mnt/daten/zettelkasten/karten"
 abschrift = "schedulae_karten.json"
 konto = "schedulae"                      # Twitter-Konto, auf dem die Karten erschienen sind
-bereich = "Soziologie"
+bereich = "Soziologie/Kartei"            # eigener Unterordner, die Kartei hat ihre eigene Ordnung
 konten_mit_karten = ["soziologie"]       # Mastodon-Konten, auf denen Karten schon als Zettel stehen
 
 [ollama]
