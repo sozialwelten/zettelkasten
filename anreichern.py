@@ -4,6 +4,8 @@ Aufruf:
   .venv/bin/python anreichern.py --hoechstens 10      10 Einheiten anreichern und alle Ergebnisse zeigen
   .venv/bin/python anreichern.py --minuten 120        zwei Stunden lang anreichern
   .venv/bin/python anreichern.py --stand              nur zählen, was erledigt, bereit und wartend ist
+  .venv/bin/python anreichern.py --bereich offen --hoechstens 10
+                                                     nur Einheiten aus diesem Bereich
 
 Liest DATEN/einheiten.jsonl und die Abschriften aus DATEN/abschriften/. Eine Einheit ist bereit, wenn alle
 ihre Bilder abgeschrieben sind. Je Einheit entsteht DATEN/anreicherung/<kennung>.json. Was schon angereichert
@@ -12,8 +14,10 @@ ist, wird übersprungen.
 Was das Modell liefert und was der Code daraus macht:
   titel        kurz und begrifflich; wird zum Dateinamen der Notiz
   bereich      nur bei Einheiten mit Bereich „offen“, aus der Liste in config.toml [anreicherung] bereiche
-  hashtags     zusätzliche Begriffe; der Code behält nur die, die im Text oder in einer Abschrift vorkommen
+  hashtags     höchstens drei zusätzliche Begriffe; der Code behält nur die, die in meinem eigenen Text
+               vorkommen, bei Einheiten mit weniger als zehn eigenen Wörtern auch aus den Abschriften
   lesefassung  nur bei Zetteln und Notizen an mich selbst; leer, wenn der Zettel schon gut verständlich ist.
+               Keine, wenn der Zettel weniger als 15 eigene Wörter ohne Links hat und kein Bild mit Text.
                Enthält sie Zahlen, die im Zettel nicht vorkommen, verwirft der Code sie.
 
 Zeilen, die in sehr vielen Abschriften wörtlich gleich vorkommen (Folienköpfe, Logos), bekommt das Modell nicht
@@ -36,6 +40,9 @@ from abschreiben import LESESAAL_SPERRE, abkuehlen, lade_konfiguration
 
 WOERTER_HOECHSTENS = 2500        # mehr Text geht nicht ins Modell; der Rest wird abgeschnitten
 LESEFASSUNG_BIS_WOERTER = 1200   # längere Einheiten bekommen keine Lesefassung
+LESEFASSUNG_AB_WOERTER = 15      # kürzere Zettel ohne Bild mit Text bekommen keine Lesefassung
+HASHTAGS_HOECHSTENS = 3          # so viele Hashtags ergänzt das Modell höchstens
+EIGENE_HASHTAGS_AB_WOERTER = 10  # ab so vielen eigenen Wörtern kommen neue Hashtags nur aus dem eigenen Text
 
 
 def vergleichsform(text):
@@ -62,6 +69,17 @@ def kopfzeilen(abschriften, ab):
 
 def ohne_kopf(abschrift, kopf):
     return "\n".join(z for z in abschrift.splitlines() if z.strip() and z.strip() not in kopf)
+
+
+def eigener_text(einheit):
+    """Meine eigenen Worte der Einheit, ohne Links."""
+    text = "\n".join(b["text"] for b in einheit["beitraege"] if b["text"])
+    return re.sub(r"\(?https?://\S+", " ", text)
+
+
+def hat_bildtext(einheit, abschriften, kopf):
+    return any(ohne_kopf(abschriften.get(Path(bild["datei"]).name, {}).get("abschrift", ""), kopf)
+               for b in einheit["beitraege"] for bild in b["bilder"])
 
 
 def quelltext(einheit, abschriften, kopf):
@@ -102,9 +120,10 @@ def anweisung(einheit, text, einst, mit_lesefassung):
         "Aufgaben:",
         "titel: Ein kurzer, begrifflicher Titel auf Deutsch, höchstens acht Wörter, so dass ich in einer langen "
         "Liste erkenne, worum es geht. Fachbegriffe aus dem Text bevorzugen. Kein Datum, keine Satzzeichen am Ende.",
-        "hashtags: Bis zu acht weitere Schlagworte, die genau so im Text oder in den Abschriften vorkommen und das "
-        "Thema treffen. Ohne Raute, mehrere Wörter zusammengeschrieben wie KuenstlicheIntelligenz oder "
-        "ÖffentlicherSektor. Keine, die schon vorhanden sind.",
+        "hashtags: Höchstens drei weitere Schlagworte, die genau so in meinem Text vorkommen und das Thema "
+        "tragen, die wichtigsten zuerst. Keine allgemeinen Wörter wie Vorstellungen oder Merkmal. Ohne Raute, "
+        "mehrere Wörter zusammengeschrieben wie ÖffentlicherSektor. Keine, die schon vorhanden sind. Lieber "
+        "keines als ein beliebiges.",
     ]
     if einheit["bereich"] == "offen":
         zeilen.append("bereich: Wähle genau einen Bereich aus dieser Liste. Im Zweifel „ungeordnet“.")
@@ -114,8 +133,11 @@ def anweisung(einheit, text, einst, mit_lesefassung):
             "lesefassung: Ich habe wegen der Zeichengrenze oft stark verkürzt. Formuliere den Zettel in ganzen, "
             "verständlichen Sätzen aus, in meiner Perspektive. Verkürzungen auflösen, soweit sie sich aus dem Zettel "
             "selbst ergeben. Keine Fakten, Zahlen, Namen, Beispiele oder Erklärungen ergänzen, die nicht im Zettel "
-            "stehen. Inhalte aus den Abschriften nur so weit einbeziehen, wie der Zettel sie braucht. Lass das Feld "
-            "leer, wenn der Zettel schon gut verständlich ist."
+            "stehen. Inhalte aus den Abschriften nur so weit einbeziehen, wie der Zettel sie braucht. Abkürzungen nur "
+            "ausschreiben, wenn die Langform im Zettel oder in einer Abschrift steht. Keine Namen von Personen, "
+            "Organisationen oder Orten ergänzen, die dort nicht stehen. Zeilen, die nur die Quelle oder die "
+            "Veranstaltung nennen, nicht als Inhalt wiedergeben. Lass das Feld leer, wenn der Zettel schon gut "
+            "verständlich ist oder nur aus Links besteht."
         )
     return "\n".join(zeilen)
 
@@ -147,6 +169,25 @@ def frage_modell(konf, inhalt, form):
     return ergebnis, round(time.monotonic() - beginn, 1)
 
 
+def trenne_woerter(titel, einheit=None, text=""):
+    """Zusammengeschriebene Wörter im Titel trennen: ÖffentlicherSektor → Öffentlicher Sektor.
+
+    Ein Wort bleibt, wie es ist, wenn es genau so im Text steht und dort kein Hashtag ist,
+    etwa YouTube oder PeerTube.
+    """
+    schutz = text
+    for h in (einheit or {}).get("hashtags", []):
+        schutz = re.sub(rf"(?<!\w){re.escape(h)}(?!\w)", " ", schutz)
+
+    def teile(treffer):
+        wort = treffer.group(0)
+        if wort in schutz.split() or re.search(rf"(?<!\w){re.escape(wort)}(?!\w)", schutz):
+            return wort
+        return re.sub(r"(?<=[a-zäöüß]{2})(?=[A-ZÄÖÜ][a-zäöüß])", " ", wort)
+
+    return re.sub(r"\S+", teile, titel)
+
+
 def sauberer_hashtag(h):
     return re.sub(r"[^\wÄÖÜäöüß]", "", str(h).lstrip("#").replace(" ", ""))
 
@@ -155,6 +196,8 @@ def pruefe(einheit, roh, text, einst):
     """Ergebnis des Modells prüfen und bereinigen. Gibt (ergebnis, gründe) zurück."""
     gruende = []
     quelle = vergleichsform(text + " " + " ".join(einheit["hashtags"]))
+    eigen = eigener_text(einheit)
+    tag_quelle = vergleichsform(eigen) if len(eigen.split()) >= EIGENE_HASHTAGS_AB_WOERTER else quelle
     vorhanden = {vergleichsform(h) for h in einheit["hashtags"]}
     neue = []
     for h in roh.get("hashtags", []):
@@ -162,11 +205,15 @@ def pruefe(einheit, roh, text, einst):
         v = vergleichsform(h)
         if not h or v in vorhanden or v in {vergleichsform(x) for x in neue}:
             continue
-        if v not in quelle:
-            gruende.append(f"Hashtag nicht im Text: {h}")
+        if v not in tag_quelle:
+            gruende.append(f"Hashtag nicht im eigenen Text: {h}" if v in quelle else f"Hashtag nicht im Text: {h}")
+            continue
+        if len(neue) >= HASHTAGS_HOECHSTENS:
+            gruende.append(f"Hashtag über der Höchstzahl: {h}")
             continue
         neue.append(h)
-    titel = " ".join(str(roh.get("titel", "")).replace("/", " ").split()).strip(" .:;") or einheit["art"]
+    titel = " ".join(str(roh.get("titel", "")).replace("/", " ").split()).strip(" .:;")
+    titel = trenne_woerter(titel, einheit, text) or einheit["art"]
     ergebnis = {"titel": titel[:90], "hashtags_neu": neue}
     if einheit["bereich"] == "offen":
         bereich = roh.get("bereich", "ungeordnet")
@@ -186,6 +233,8 @@ def main():
     parser.add_argument("--hoechstens", type=int, help="höchstens so viele Einheiten")
     parser.add_argument("--minuten", type=float, help="höchstens so lange")
     parser.add_argument("--stand", action="store_true", help="nur zählen")
+    parser.add_argument("--bereich", action="append", metavar="NAME",
+                        help="nur Einheiten aus diesem Bereich, etwa offen oder Gespräch; mehrfach möglich")
     args = parser.parse_args()
 
     konf = lade_konfiguration()
@@ -212,6 +261,9 @@ def main():
             bereit.append(e)
         else:
             wartet += 1
+    if args.bereich:
+        bereit = [e for e in bereit if e["bereich"] in args.bereich]
+        print(f"Nur Bereich {', '.join(args.bereich)}: {len(bereit)} bereit")
     print(f"{len(einheiten)} Einheiten: {len(erledigt)} angereichert, {len(bereit)} bereit, "
           f"{wartet} warten auf Abschriften. Kopfzeilen, die ausgeblendet werden: {len(kopf)}")
     if args.stand or not bereit:
@@ -239,7 +291,9 @@ def main():
             break
         abkuehlen(einst)
         text, worte = quelltext(einheit, abschriften, kopf)
-        mit_lesefassung = einheit["art"] in ("zettel", "notiz") and worte <= LESEFASSUNG_BIS_WOERTER
+        mit_lesefassung = (einheit["art"] in ("zettel", "notiz") and worte <= LESEFASSUNG_BIS_WOERTER
+                           and (len(eigener_text(einheit).split()) >= LESEFASSUNG_AB_WOERTER
+                                or hat_bildtext(einheit, abschriften, kopf)))
         roh, dauer = frage_modell(konf, anweisung(einheit, text, einst, mit_lesefassung),
                                   schema(einheit, einst, mit_lesefassung))
         ergebnis, gruende = pruefe(einheit, roh, text, einst)

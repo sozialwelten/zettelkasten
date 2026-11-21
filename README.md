@@ -75,6 +75,7 @@ python3 einlesen.py --probe 3         zusätzlich je Bereich und Art 3 Beispieln
 .venv/bin/python anreichern.py --stand            zählen, was angereichert, bereit und wartend ist
 .venv/bin/python anreichern.py --hoechstens 10    10 Einheiten anreichern und die Ergebnisse zeigen
 .venv/bin/python anreichern.py --minuten 120      zwei Stunden lang anreichern
+.venv/bin/python anreichern.py --bereich offen --hoechstens 10   nur Einheiten aus diesem Bereich
 .venv/bin/python schreiben.py --probe 3           je Bereich 3 Notizen in einen Probe-Vault
 .venv/bin/python schreiben.py                     alle fertigen Einheiten in den Vault schreiben
 ```

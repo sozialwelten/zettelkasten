@@ -43,6 +43,9 @@ BERLIN = ZoneInfo("Europe/Berlin")
 OEFFENTLICH = "https://www.w3.org/ns/activitystreams#Public"
 NULLBREITE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 MARKE_AUF, MARKE_ZU = "\u0001", "\u0002"  # umschließen Hashtags im Text, bis Hashtag-Zeilen entfernt sind
+VERWEIS = re.compile(r"(\b(?:[Vv]gl|[Ss]iehe|[Cc]f)\.?|\b[Ss]\.|→|->|=>)(\s*)"
+                     + MARKE_AUF + "([^" + MARKE_ZU + "]*)" + MARKE_ZU)
+VERWEIS_FOLGE = re.compile(r"(#[\w-]+)(\s*(?:,|;|/|und|&)?\s*)" + MARKE_AUF + "([^" + MARKE_ZU + "]*)" + MARKE_ZU)
 
 
 def lade_konfiguration():
@@ -112,6 +115,14 @@ class Text(HTMLParser):
         text = NULLBREITE.sub("", "".join(self.teile))
         # Frühe Schreibweise ohne Nullbreitenzeichen: #Konsum(s) steht für „Konsums“ mit dem Hashtag Konsum.
         text = re.sub(MARKE_ZU + r"\((\w+)\)", MARKE_ZU + r"\1", text)
+        # Verweise wie „vgl. #Gefahrenmeldung“ behalten die Raute an ihrer Stelle, damit sie in Obsidian
+        # anklickbar bleiben; ebenso weitere Hashtags, die direkt danach aufgezählt sind.
+        text = VERWEIS.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
+        while True:
+            neu = VERWEIS_FOLGE.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
+            if neu == text:
+                break
+            text = neu
         # Zeilen, die nur aus Hashtags bestehen, fallen weg: Die Hashtags stehen ohnehin als Liste unter dem Zettel.
         zeilen = []
         for zeile in text.split("\n"):

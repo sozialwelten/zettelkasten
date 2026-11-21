@@ -12,9 +12,11 @@ wird sie auch nicht neu angelegt.
 
 Aufbau einer Notiz:
   Kopfzeile: Bereich, Konto, Datum oder Zeitraum, Link zum Original; bei Gesprächen „Mit:“
-  meine Beiträge, bei mehreren mit Datum und Uhrzeit; darunter je Bild das Bild und die Abschrift als Zitat
-  die Lesefassung, abgesetzt durch eine Linie
-  die Hashtags: zuerst meine, dann die vom Modell ergänzten
+  meine Beiträge, bei mehreren mit Datum und Uhrzeit; darunter je Bild das Bild und die Abschrift in einem
+  zugeklappten Kasten „Abschrift“ (Obsidian-Callout; die Suche findet den Text trotzdem)
+  die Lesefassung, abgesetzt durch eine Linie und mit der Zeile „Lesefassung“
+  die Hashtags: zuerst meine, dann die vom Modell ergänzten; Doppel, die sich nur in Groß- und
+  Kleinschreibung unterscheiden, nur einmal
 
 Dateiname: der Titel aus der Anreicherung. Gibt es ihn im Bereich schon, kommt das Datum dazu.
 Das Änderungsdatum jeder Notiz wird auf das Datum des ersten Beitrags gesetzt, damit Obsidian auch
@@ -31,7 +33,7 @@ from datetime import datetime
 from pathlib import Path
 
 from abschreiben import lade_konfiguration
-from anreichern import kopfzeilen, lies_abschriften, ohne_kopf
+from anreichern import kopfzeilen, lies_abschriften, ohne_kopf, trenne_woerter
 from einlesen import ANHAENGE
 
 VERBOTEN = re.compile(r'[\\/:*?"<>|#^\[\]]')
@@ -67,12 +69,17 @@ def als_notiz(einheit, anreicherung, abschriften, kopf):
                 zeilen.append(f"Bildbeschreibung: {bild['beschreibung']}")
             text = ohne_kopf(daten.get("abschrift", ""), kopf)
             if text:
-                zeilen += [""] + [f"> {z}" for z in text.splitlines()]
+                zeilen += ["", "> [!quote]- Abschrift"] + [f"> {z}" for z in text.splitlines()]
             elif daten.get("beschreibung") and not bild["beschreibung"]:
                 zeilen.append(f"Bild: {daten['beschreibung']}")
     if anreicherung.get("lesefassung"):
-        zeilen += ["", "---", "", anreicherung["lesefassung"]]
-    hashtags = einheit["hashtags"] + anreicherung.get("hashtags_neu", [])
+        zeilen += ["", "---", "", "**Lesefassung**", "", anreicherung["lesefassung"]]
+    hashtags, gesehen = [], set()
+    for h in einheit["hashtags"] + anreicherung.get("hashtags_neu", []):
+        h = re.sub(r"\s+", "", h)
+        if h and h.casefold() not in gesehen:
+            gesehen.add(h.casefold())
+            hashtags.append(h)
     if hashtags:
         zeilen += ["", " ".join("#" + re.sub(r"\s+", "", h) for h in hashtags)]
     return bereich, "\n".join(zeilen) + "\n"
@@ -111,7 +118,8 @@ def main():
             continue
         ordner = vault / bereich
         ordner.mkdir(parents=True, exist_ok=True)
-        name = dateiname(anreicherung["titel"])
+        eigen = "\n".join(b["text"] for b in einheit["beitraege"] if b["text"])
+        name = dateiname(trenne_woerter(anreicherung["titel"], einheit, eigen))
         pfad = ordner / f"{name}.md"
         if pfad.exists():
             pfad = ordner / f"{name} ({datetime.fromisoformat(einheit['von']):%d.%m.%Y}).md"
