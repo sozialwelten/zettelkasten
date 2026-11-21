@@ -75,6 +75,14 @@ Ein Teil des Zettelkastens existiert nur auf Papier: handschriftliche Karteikart
 .venv/bin/python karten.py QUELLE ZIEL --kante 2000  andere Kantenlänge für die kleine Fassung
 ```
 
+Die Abschriften stehen in einer JSON-Datei, je Karte Nummer, Titel, Fotos der Seiten, Text je Seite und die Nummern aus den Vgl.-Zeilen. Ist `[karten]` in `config.toml` gesetzt, liest `kartei.py` sie beim Einlesen mit ein:
+
+- Jede Karte wird ein Zettel, mit der Abschrift als Text und den Fotos als Bilder. Die Fotos gelten als abgeschrieben, das Bildmodell lässt sie aus.
+- Tweets, die nur Kartennummer, Titel und Link enthalten, werden keine eigenen Notizen. Ihr Datum steht als „Getwittert“ in der Karte. Das gilt auch für Karten, die schon als Zettel auf einem Mastodon-Konto stehen (`konten_mit_karten`).
+- Zugeordnet wird zuerst über den Titel, dann über die Nummer, weil sich Nummern beim Umsortieren geändert haben.
+- Karten ohne Tweet heißen in der Notiz „undatiert“.
+- Den Titel der Notiz gibt die Karte vor, nicht das Modell.
+
 Handschrift liest das lokale Bildmodell nicht zuverlässig genug. Die Karten werden deshalb mit Claude abgeschrieben. Es sind Exzerpte und eigene Gedanken zu Fachtexten, nichts Persönliches. Das ist die einzige Stelle, an der Inhalte des Zettelkastens einen externen Dienst sehen.
 
 ## Einheiten
@@ -114,6 +122,18 @@ Das Modell sieht keine Zeilen, die in sehr vielen Abschriften gleich vorkommen, 
 Die Abschrift schreibt je Bild eine JSON-Datei nach `DATEN/abschriften/` und macht beim nächsten Aufruf dort weiter. Anhalten mit der Datei `DATEN/stopp`, nach dem laufenden Bild. Zwischen zwei Bildern wartet sie, wenn eine Grafikkarte zu heiß wird.
 
 Pfade und die Bereiche der thematischen Konten stehen in `config.toml`.
+
+## Aufräumen eines Kontos
+
+`aufraeumen.py` löscht freistehende Beiträge ohne Hashtag und ohne Erwähnung aus einem Mastodon-Konto, etwa um ein gemischt genutztes Konto auszudünnen. Die Auswahl kommt aus den eingelesenen Einheiten, die Beiträge bleiben also im Export und im Zettelkasten erhalten.
+
+```
+.venv/bin/python aufraeumen.py liste --konto KONTO --seit 2024-11-21   Auswahl nach DATEN/aufraeumen/KONTO/, ändert nichts
+.venv/bin/python aufraeumen.py loeschen --konto KONTO                  Liste abarbeiten, 30 Löschungen je 30 Minuten
+.venv/bin/python aufraeumen.py --stand --konto KONTO                   zählen
+```
+
+Beiträge, auf die andere geantwortet haben, bleiben stehen. Das Token braucht nur `read:statuses` und `write:statuses` und liegt in `.env.aufraeumen`.
 
 ## Lizenz
 

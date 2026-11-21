@@ -5,6 +5,7 @@ __pycache__/
 
 # Zugangsdaten
 .env
+.env.*
 
 # Daten gehören nie ins Repository
 *.zip
