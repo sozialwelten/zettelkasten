@@ -356,9 +356,9 @@ def main():
         print(f"  {konto}: {len(einheiten)} Einheiten: " + ", ".join(f"{n} {a}" for a, n in arten.most_common()))
 
     if konf["pfade"].get("twitter") and not args.archive:
-        from twitter import lies_twitter, namensliste, neueste_twitter_archive
+        from twitter import lies_twitter, namen_aus_datei, namensliste, neueste_twitter_archive
         twitter_archive = neueste_twitter_archive(konf["pfade"]["twitter"])
-        namen = namensliste(twitter_archive)
+        namen = namensliste(twitter_archive, namen_aus_datei(konf))
         for archiv in twitter_archive:
             print(f"lese {archiv.name} …", file=sys.stderr, flush=True)
             konto, einheiten = lies_twitter(archiv, namen, konf)

@@ -6,6 +6,7 @@ jüngste Archiv. Erkannt wird ein Archiv an data/tweet.js und data/account.js.
 Was daraus wird:
   zettel / beitrag  eigener Tweet oder Thread an mich selbst; zettel mit Hashtags, sonst beitrag.
                     Bei den Konten aus [twitter] zettelkonten wird alles Eigene zum Zettel.
+                    Beide bekommen den Bereich „offen“; beim beitrag darf das Modell auch „Gespräch“ wählen.
   antwort           meine Antworten an andere, je Tweet, auf den ich geantwortet habe; nur meine Seite,
                     weil das Archiv die Tweets der anderen nicht enthält
   direkt            Direktnachrichten und Gruppen mit beiden Seiten, je Gespräch und Monat
@@ -15,7 +16,10 @@ steht der Retweet als Kontext in dessen Einheit („Kurz davor geteilt“).
 
 Links: t.co wird zur echten Adresse aufgelöst. Links auf Twitter selbst gibt es nicht, weil die Konten
 und die Plattform in dieser Form nicht mehr bestehen. Erwähnungen bleiben als @name im Text.
-Direktnachrichten nennen nur Kontonummern; die Namen kommen aus allen eingelesenen Archiven.
+Direktnachrichten nennen nur Kontonummern; die Namen kommen aus allen eingelesenen Archiven und aus
+DATEN/twitter_namen.toml (eine Zeile je Konto: "1234567890" = "Vorname"). Welche Nummern noch ohne Namen sind, zeigt:
+
+  .venv/bin/python twitter.py --unbekannt            Nummer, Zahl der Nachrichten, Zeitraum, Gruppen
 """
 
 import html
@@ -75,8 +79,9 @@ def tweets_von(z):
     return [e.get("tweet", e) for e in lies_ytd(z, "data/tweet.js")]
 
 
-def namensliste(archive):
-    """Kontonummer → Name aus allen Archiven: eigene Konten, Erwähnungen, Antworten."""
+def namensliste(archive, bekannt=None):
+    """Kontonummer → Name aus allen Archiven: eigene Konten, Erwähnungen, Antworten.
+    Einträge aus DATEN/twitter_namen.toml gehen vor; sie dürfen auch Klarnamen sein."""
     namen = {}
     for pfad in archive:
         with zipfile.ZipFile(pfad) as z:
@@ -88,7 +93,18 @@ def namensliste(archive):
                         namen.setdefault(m["id_str"], m["screen_name"])
                 if t.get("in_reply_to_user_id_str") and t.get("in_reply_to_screen_name"):
                     namen.setdefault(t["in_reply_to_user_id_str"], t["in_reply_to_screen_name"])
+    namen.update({str(k): v for k, v in (bekannt or {}).items()})
     return namen
+
+
+def namen_aus_datei(konf):
+    """Eigene Zuordnung Kontonummer → Name aus DATEN/twitter_namen.toml (liegt nicht im Repository)."""
+    import tomllib
+    pfad = Path(konf["pfade"]["daten"]) / "twitter_namen.toml"
+    if not pfad.exists():
+        return {}
+    with open(pfad, "rb") as f:
+        return {str(k): str(v) for k, v in tomllib.load(f).items()}
 
 
 def zeit_tweet(text):
@@ -142,6 +158,7 @@ def lies_twitter(archiv, namen, konf):
         dms = lies_ytd(z, "data/direct-messages.js")
         gruppen_dms = lies_ytd(z, "data/direct-messages-group.js")
     konto, ich = konto_daten["username"], konto_daten["accountId"]
+    eigene_namen = set(namen_aus_datei(konf))  # Klarnamen aus der eigenen Liste, ohne @
     tweet_medien = medien_index(alle_namen, "tweet_media")
     dm_medien = medien_index(alle_namen, "direct_messages_media")
     gruppe_medien = medien_index(alle_namen, "direct_messages_group_media")
@@ -149,7 +166,9 @@ def lies_twitter(archiv, namen, konf):
     def bereich_fuer(art):
         if konto in bereiche:
             return bereiche[konto]
-        if art in ("antwort", "beitrag"):
+        if art == "beitrag":
+            return "offen"  # das Modell wählt, Gespräch ist eine der Möglichkeiten
+        if art == "antwort":
             return "Gespräch"
         if art == "direkt":
             return "Gespräch/Direkt"
@@ -263,17 +282,70 @@ def lies_twitter(archiv, namen, konf):
                     text = text.replace(u, "")
                 text = html.unescape(text).strip()
                 absender = namen.get(n.get("senderId"), "") or f"Konto {n.get('senderId', '?')}"
+                klar = n.get("senderId") in eigene_namen
                 beteiligte.update(x for x in (n.get("senderId"), n.get("recipientId")) if x and x != ich)
                 bilder = [als_bild(d) for d in sorted(medien.get(n["id"], []))]
                 if n.get("senderId") == ich:
                     absender = "@" + konto
-                elif not absender.startswith("Konto"):
+                elif not absender.startswith("Konto") and not klar:
                     absender = "@" + absender
                 je_monat[f"{zeit:%Y-%m}"].append(beitrag(n["id"], zeit, text, bilder=bilder, absender=absender))
-            partner = [{"name": ("@" + namen[b]) if b in namen else f"Konto {b}", "href": ""} for b in sorted(beteiligte)]
+            partner = [{"name": (namen[b] if b in eigene_namen else "@" + namen[b]) if b in namen else f"Konto {b}",
+                        "href": ""} for b in sorted(beteiligte)]
             for monat, teile in je_monat.items():
                 e = einheit(f"dm-{g.get('conversationId', '?')}-{monat}", "direkt", teile, partner=partner)
                 if titel:
                     e["gruppenname"] = titel
                 einheiten.append(e)
     return konto, einheiten
+
+
+def unbekannte(archive, namen):
+    """Kontonummern aus Direktnachrichten, zu denen es keinen Namen gibt: {nummer: Angaben}."""
+    offen = {}
+    for pfad in archive:
+        with zipfile.ZipFile(pfad) as z:
+            konto = lies_ytd(z, "data/account.js")[0]["account"]["username"]
+            quellen = lies_ytd(z, "data/direct-messages.js") + lies_ytd(z, "data/direct-messages-group.js")
+        for eintrag in quellen:
+            g = eintrag.get("dmConversation", eintrag)
+            titel = ""
+            for m in g.get("messages", []):
+                if "conversationNameUpdate" in m:
+                    titel = m["conversationNameUpdate"].get("name", titel)
+                n = m.get("messageCreate")
+                if not n or n.get("senderId") in namen:
+                    continue
+                a = offen.setdefault(n["senderId"], {"anzahl": 0, "von": n["createdAt"], "bis": n["createdAt"],
+                                                     "konten": set(), "gruppen": set(), "mit": set()})
+                a["anzahl"] += 1
+                a["von"], a["bis"] = min(a["von"], n["createdAt"]), max(a["bis"], n["createdAt"])
+                a["konten"].add(konto)
+                if titel:
+                    a["gruppen"].add(titel)
+                for p in g.get("participants", []) or []:
+                    pid = p.get("userId") if isinstance(p, dict) else p
+                    if pid in namen:
+                        a["mit"].add(namen[pid])
+    return offen
+
+
+if __name__ == "__main__":
+    import argparse
+    import tomllib
+    ap = argparse.ArgumentParser(description="Hilfen zu den Twitter-Archiven")
+    ap.add_argument("--unbekannt", action="store_true", help="Kontonummern ohne Namen auflisten")
+    args = ap.parse_args()
+    with open(Path(__file__).resolve().parent / "config.toml", "rb") as f:
+        konf = tomllib.load(f)
+    archive = neueste_twitter_archive(konf["pfade"]["twitter"])
+    namen = namensliste(archive, namen_aus_datei(konf))
+    if args.unbekannt:
+        liste = unbekannte(archive, namen)
+        print(f"{len(liste)} Kontonummern ohne Namen, nach Zahl der Nachrichten:\n")
+        for nummer, a in sorted(liste.items(), key=lambda x: -x[1]["anzahl"]):
+            zusatz = ""
+            if a["gruppen"]:
+                zusatz += " · Gruppe: " + ", ".join(sorted(a["gruppen"]))[:60]
+            print(f"{nummer:>20}  {a['anzahl']:>4} Nachr.  {a['von'][:7]} bis {a['bis'][:7]}  "
+                  f"an {', '.join(sorted(a['konten']))}{zusatz}")

@@ -62,6 +62,10 @@ Die Twitter-Archive von 2020 liegen als Zip-Dateien in dem Ordner, den `[pfade] 
 - Bilder gehen durch die Abschrift, Videos und GIFs kommen als Datei in den Vault.
 - Bei den Konten aus `[twitter] zettelkonten` wird alles Eigene ein Zettel, auch ohne Hashtag.
 
+Eigene Tweets ohne Hashtag (beitrag) bekommen den Bereich „offen“. Das Modell ordnet sie einem Bereich zu und darf dabei zusätzlich „Gespräch“ wählen, für Alltägliches ohne Zettelcharakter.
+
+Direktnachrichten nennen nur Kontonummern. Namen, die in keinem Archiv stehen, kommen aus `DATEN/twitter_namen.toml`, eine Zeile je Konto wie `"1234567890" = "Vorname"`. Die Datei liegt bei den Daten und nicht im Repository. Welche Nummern noch fehlen, zeigt `.venv/bin/python twitter.py --unbekannt`.
+
 `twitter_struktur.py ORDNER` zeigt den Aufbau der Archive, ohne Inhalte auszugeben.
 
 ## Physische Karten

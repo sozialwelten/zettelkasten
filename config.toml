@@ -10,6 +10,9 @@ vault = "/home/apollon/Nextcloud/Wolkenstadt/Dokumente/Arbeitsorganisation/Zette
 # Konten, bei denen alles Eigene ein Zettel ist, auch ohne Hashtag; Bereich vergibt das Modell
 zettelkonten = ["schedulae", "descriptiones", "raumhueter", "mkarbacher"]
 
+# Namen zu Kontonummern aus Direktnachrichten stehen nicht hier, weil das Repository öffentlich ist,
+# sondern in DATEN/twitter_namen.toml, etwa: "1234567890" = "Vorname" (siehe twitter.py --unbekannt)
+
 # Bereich je thematischem Konto (Benutzername ohne @). Zettel aus anderen Konten ordnet das Modell zu.
 [bereiche]
 hotelfachwesen = "Hauptbuch"
@@ -51,3 +54,7 @@ Waldbau = "Jagd, Jagdschein, Waffenkunde, Natur, Bäume, Pilze, Kräuter"
 Oikos = "Persönliches, Termine, Wohnen, Ausflüge, Konsum, Freizeit, Reisen, persönliche Reflexion und Planung"
 Recht = "juristische Grundlagen aus dem Jurastudium: Zivilrecht, Römische Rechtsgeschichte, Öffentliches Recht und Grundrechte, Strafrecht, Rechtsphilosophie, Rechtsgeschichte"
 ungeordnet = "passt in keinen der anderen Bereiche sicher"
+
+# Zusätzliche Wahl nur für einfache Beiträge ohne Hashtag (Art beitrag), etwa von Twitter
+[anreicherung.bereiche_beitrag]
+"Gespräch" = "alltäglicher Social-Media-Beitrag ohne Zettelcharakter: Kommentar zum Tagesgeschehen, Smalltalk, Gruß, Hinweis oder Link ohne eigenen Gedanken"

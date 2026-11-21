@@ -104,6 +104,14 @@ def quelltext(einheit, abschriften, kopf):
     return " ".join(worte[:WOERTER_HOECHSTENS]), len(worte)
 
 
+def bereiche_fuer(einheit, einst):
+    """Bereiche, aus denen das Modell wählt; einfache Beiträge dürfen zusätzlich ins Gespräch."""
+    bereiche = dict(einst["bereiche"])
+    if einheit["art"] == "beitrag":
+        bereiche.update(einst.get("bereiche_beitrag", {}))
+    return bereiche
+
+
 def anweisung(einheit, text, einst, mit_lesefassung):
     arten = {
         "zettel": "einen Zettel aus meinem Zettelkasten",
@@ -132,7 +140,7 @@ def anweisung(einheit, text, einst, mit_lesefassung):
     ]
     if einheit["bereich"] == "offen":
         zeilen.append("bereich: Wähle genau einen Bereich aus dieser Liste. Im Zweifel „ungeordnet“.")
-        zeilen += [f"- {name}: {beschreibung}" for name, beschreibung in einst["bereiche"].items()]
+        zeilen += [f"- {name}: {beschreibung}" for name, beschreibung in bereiche_fuer(einheit, einst).items()]
     if mit_lesefassung:
         zeilen.append(
             "lesefassung: Ich habe wegen der Zeichengrenze oft stark verkürzt. Formuliere den Zettel in ganzen, "
@@ -150,7 +158,7 @@ def anweisung(einheit, text, einst, mit_lesefassung):
 def schema(einheit, einst, mit_lesefassung):
     eigenschaften = {"titel": {"type": "string"}, "hashtags": {"type": "array", "items": {"type": "string"}}}
     if einheit["bereich"] == "offen":
-        eigenschaften["bereich"] = {"type": "string", "enum": list(einst["bereiche"])}
+        eigenschaften["bereich"] = {"type": "string", "enum": list(bereiche_fuer(einheit, einst))}
     if mit_lesefassung:
         eigenschaften["lesefassung"] = {"type": "string"}
     return {"type": "object", "properties": eigenschaften, "required": list(eigenschaften)}
@@ -224,7 +232,7 @@ def pruefe(einheit, roh, text, einst):
     ergebnis = {"titel": titel[:90], "hashtags_neu": neue}
     if einheit["bereich"] == "offen":
         bereich = roh.get("bereich", "ungeordnet")
-        ergebnis["bereich"] = bereich if bereich in einst["bereiche"] else "ungeordnet"
+        ergebnis["bereich"] = bereich if bereich in bereiche_fuer(einheit, einst) else "ungeordnet"
     lesefassung = str(roh.get("lesefassung", "")).strip()
     if lesefassung:
         fremde = [z for z in re.findall(r"\d+(?:[.,]\d+)*", lesefassung) if vergleichsform(z) not in quelle]
