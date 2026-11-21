@@ -95,6 +95,9 @@ def als_notiz(einheit, anreicherung, abschriften, kopf):
             zeilen += [f"Inhaltswarnung: {b['inhaltswarnung']}", ""]
         if b["text"]:
             zeilen.append(b["text"])
+        if einheit.get("verweis_titel") and b is einheit["beitraege"][0]:
+            # Verweise der Kartei direkt unter den Text, vor die Fotos
+            zeilen += ["", "Verweise: " + ", ".join(f"[[{dateiname(t)}]]" for t in einheit["verweis_titel"])]
         for bild in b["bilder"]:
             name = Path(bild["datei"]).name
             daten = abschriften.get(name, {})
@@ -106,9 +109,6 @@ def als_notiz(einheit, anreicherung, abschriften, kopf):
                 zeilen += ["", "> [!quote]- Abschrift"] + [f"> {z}" for z in text.splitlines()]
             elif daten.get("beschreibung") and not bild["beschreibung"]:
                 zeilen.append(f"Bild: {daten['beschreibung']}")
-    if einheit.get("verweis_titel"):
-        # <br> als zusätzlicher Abstand: Obsidian setzt nach eingebetteten Bildern sonst kaum Luft
-        zeilen += ["", "<br>", "", "Verweise: " + ", ".join(f"[[{dateiname(t)}]]" for t in einheit["verweis_titel"])]
     if anreicherung.get("lesefassung"):
         zeilen += ["", "---", "", "**Lesefassung**", "", anreicherung["lesefassung"]]
     hashtags, gesehen = [], set()
