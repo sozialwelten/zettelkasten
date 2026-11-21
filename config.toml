@@ -1,9 +1,14 @@
 # Konfiguration des Zettelkasten-Werkzeugs
 
 [pfade]
-exporte = "/home/apollon/Nextcloud/Backups/ifwo_mastodon"          # <konto>/<datum>/<archiv>.zip
+exporte = "/home/apollon/Nextcloud/Backups/ifwo_mastodon"   # Mastodon-Exporte, je Konto zählt der jüngste
+twitter = "/home/apollon/Nextcloud/Backups/Twitter"          # Twitter-Archive von 2020, je Konto das jüngste
 daten = "/mnt/daten/zettelkasten"        # Zwischenstände, Abschriften, Probe
 vault = "/home/apollon/Nextcloud/Wolkenstadt/Dokumente/Arbeitsorganisation/Zettelkasten"
+
+[twitter]
+# Konten, bei denen alles Eigene ein Zettel ist, auch ohne Hashtag; Bereich vergibt das Modell
+zettelkonten = ["schedulae", "descriptiones", "raumhueter", "mkarbacher"]
 
 # Bereich je thematischem Konto (Benutzername ohne @). Zettel aus anderen Konten ordnet das Modell zu.
 [bereiche]

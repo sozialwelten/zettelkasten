@@ -17,6 +17,8 @@ Eine Einheit ist das, was später eine Notiz wird:
   antwort  meine Antworten an andere in einem Gespräch
   direkt   Gespräch per Direktnachricht mit anderen, nur die Nachrichten mit Empfänger
 
+Twitter: Ist [pfade] twitter gesetzt, kommen die Twitter-Archive dazu (siehe twitter.py).
+
 Bereich: bei den thematischen Konten vom Konto. Bei @sozialwelten gehen antwort und beitrag nach
 „Gespräch“, direkt nach „Gespräch/Direkt“. zettel und notiz aus @sozialwelten bekommen den Bereich
 „offen“; ihn vergibt später das Modell.
@@ -43,9 +45,9 @@ BERLIN = ZoneInfo("Europe/Berlin")
 OEFFENTLICH = "https://www.w3.org/ns/activitystreams#Public"
 NULLBREITE = re.compile("[\u200b\u200c\u200d\u2060\ufeff]")
 MARKE_AUF, MARKE_ZU = "\u0001", "\u0002"  # umschließen Hashtags im Text, bis Hashtag-Zeilen entfernt sind
-VERWEIS = re.compile(r"(\b(?:[Vv]gl|[Ss]iehe|[Cc]f)\.?|\b[Ss]\.|→|->|=>)(\s*)"
+VERWEIS = re.compile(r"(\b(?:[Vv]gl|[Ss]iehe|[Cc]f)\.?|\b[Ss]\.|→|->|=>)([ \t]*)"
                      + MARKE_AUF + "([^" + MARKE_ZU + "]*)" + MARKE_ZU)
-VERWEIS_FOLGE = re.compile(r"(#[\w-]+)(\s*(?:,|;|/|und|&)?\s*)" + MARKE_AUF + "([^" + MARKE_ZU + "]*)" + MARKE_ZU)
+VERWEIS_FOLGE = re.compile(r"(#[\w-]+)([ \t]*(?:,|;|/|und|&)?[ \t]*)" + MARKE_AUF + "([^" + MARKE_ZU + "]*)" + MARKE_ZU)
 
 
 def lade_konfiguration():
@@ -112,26 +114,30 @@ class Text(HTMLParser):
             self.teile.append(data)
 
     def ergebnis(self):
-        text = NULLBREITE.sub("", "".join(self.teile))
-        # Frühe Schreibweise ohne Nullbreitenzeichen: #Konsum(s) steht für „Konsums“ mit dem Hashtag Konsum.
-        text = re.sub(MARKE_ZU + r"\((\w+)\)", MARKE_ZU + r"\1", text)
-        # Verweise wie „vgl. #Gefahrenmeldung“ behalten die Raute an ihrer Stelle, damit sie in Obsidian
-        # anklickbar bleiben; ebenso weitere Hashtags, die direkt danach aufgezählt sind.
-        text = VERWEIS.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
-        while True:
-            neu = VERWEIS_FOLGE.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
-            if neu == text:
-                break
-            text = neu
-        # Zeilen, die nur aus Hashtags bestehen, fallen weg: Die Hashtags stehen ohnehin als Liste unter dem Zettel.
-        zeilen = []
-        for zeile in text.split("\n"):
-            rest = re.sub(MARKE_AUF + "[^" + MARKE_ZU + "]*" + MARKE_ZU + r"\w*", "", zeile)
-            if MARKE_AUF in zeile and not re.sub(r"[\W_]", "", rest):
-                continue
-            zeilen.append(zeile.replace(MARKE_AUF, "").replace(MARKE_ZU, ""))
-        text = re.sub(r"[ \t]+\n", "\n", "\n".join(zeilen))
-        return re.sub(r"\n{3,}", "\n\n", text).strip()
+        return bereinige(NULLBREITE.sub("", "".join(self.teile)))
+
+
+def bereinige(text):
+    """Text mit markierten Hashtags (MARKE_AUF Name MARKE_ZU) in die Form für den Zettel bringen."""
+    # Frühe Schreibweise ohne Nullbreitenzeichen: #Konsum(s) steht für „Konsums“ mit dem Hashtag Konsum.
+    text = re.sub(MARKE_ZU + r"\((\w+)\)", MARKE_ZU + r"\1", text)
+    # Verweise wie „vgl. #Gefahrenmeldung“ behalten die Raute an ihrer Stelle, damit sie in Obsidian
+    # anklickbar bleiben; ebenso weitere Hashtags, die direkt danach aufgezählt sind.
+    text = VERWEIS.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
+    while True:
+        neu = VERWEIS_FOLGE.sub(lambda t: t.group(1) + t.group(2) + "#" + t.group(3), text)
+        if neu == text:
+            break
+        text = neu
+    # Zeilen, die nur aus Hashtags bestehen, fallen weg: Die Hashtags stehen ohnehin als Liste unter dem Zettel.
+    zeilen = []
+    for zeile in text.split("\n"):
+        rest = re.sub(MARKE_AUF + "[^" + MARKE_ZU + "]*" + MARKE_ZU + r"\w*", "", zeile)
+        if MARKE_AUF in zeile and not re.sub(r"[\W_]", "", rest):
+            continue
+        zeilen.append(zeile.replace(MARKE_AUF, "").replace(MARKE_ZU, ""))
+    text = re.sub(r"[ \t]+\n", "\n", "\n".join(zeilen))
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 KLARTEXT_ERWAEHNUNG = re.compile(r"(?<![\[\w/@.])@([A-Za-z0-9_][\w.]*)(?:@([\w-]+(?:\.[\w-]+)+))?(?!\]\()")
@@ -269,7 +275,9 @@ def dateiname(einheit):
 def als_markdown(einheit):
     beginn, ende = datetime.fromisoformat(einheit["von"]), datetime.fromisoformat(einheit["bis"])
     zeitraum = f"{beginn:%d.%m.%Y}" + (f" bis {ende:%d.%m.%Y}" if ende.date() != beginn.date() else "")
-    kopf = [einheit["bereich"], f"@{einheit['konto']}", zeitraum, f"[Original]({einheit['beitraege'][0]['url']})"]
+    kopf = [einheit["bereich"], f"@{einheit['konto']}", zeitraum]
+    if einheit["beitraege"][0]["url"]:
+        kopf.append(f"[Original]({einheit['beitraege'][0]['url']})")
     zeilen = [" · ".join(kopf)]
     if einheit["partner"]:
         zeilen.append("Mit: " + ", ".join(f"[{p['name']}]({p['href']})" if p["href"] else p["name"]
@@ -338,6 +346,18 @@ def main():
         alle += einheiten
         arten = Counter(e["art"] for e in einheiten)
         print(f"  {konto}: {len(einheiten)} Einheiten: " + ", ".join(f"{n} {a}" for a, n in arten.most_common()))
+
+    if konf["pfade"].get("twitter") and not args.archive:
+        from twitter import lies_twitter, namensliste, neueste_twitter_archive
+        twitter_archive = neueste_twitter_archive(konf["pfade"]["twitter"])
+        namen = namensliste(twitter_archive)
+        for archiv in twitter_archive:
+            print(f"lese {archiv.name} …", file=sys.stderr, flush=True)
+            konto, einheiten = lies_twitter(archiv, namen, konf)
+            alle += einheiten
+            arten = Counter(e["art"] for e in einheiten)
+            print(f"  {konto} (Twitter): {len(einheiten)} Einheiten: "
+                  + ", ".join(f"{n} {a}" for a, n in arten.most_common()))
 
     with open(daten / "einheiten.jsonl", "w", encoding="utf-8") as f:
         for einheit in alle:

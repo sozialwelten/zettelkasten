@@ -36,7 +36,7 @@ from pathlib import Path
 
 import requests
 
-from abschreiben import LESESAAL_SPERRE, abkuehlen, lade_konfiguration
+from abschreiben import BILDTYPEN, LESESAAL_SPERRE, abkuehlen, lade_konfiguration
 
 WOERTER_HOECHSTENS = 2500        # mehr Text geht nicht ins Modell; der Rest wird abgeschnitten
 LESEFASSUNG_BIS_WOERTER = 1200   # längere Einheiten bekommen keine Lesefassung
@@ -85,9 +85,11 @@ def hat_bildtext(einheit, abschriften, kopf):
 def quelltext(einheit, abschriften, kopf):
     """Alles, was zur Einheit gehört, als Text für das Modell und für die Prüfungen."""
     teile = []
+    for k in einheit.get("kontext", []):
+        teile.append(f"[Kurz davor geteilt, von @{k['autor']}: {k['text']}]")
     for b in einheit["beitraege"]:
         if b["text"]:
-            teile.append(b["text"])
+            teile.append(f"{b['absender']}: {b['text']}" if b.get("absender") else b["text"])
         for bild in b["bilder"]:
             name = Path(bild["datei"]).name
             daten = abschriften.get(name, {})
@@ -109,7 +111,10 @@ def anweisung(einheit, text, einst, mit_lesefassung):
         "beitrag": "einen öffentlichen Beitrag von mir in sozialen Medien",
         "antwort": "meine Antworten in einem Gespräch mit anderen",
         "direkt": "meine Nachrichten in einem privaten Gespräch",
+        "geteilt": "Beiträge anderer, die ich geteilt habe",
     }
+    if einheit["art"] == "direkt" and any(b.get("absender") for b in einheit["beitraege"]):
+        arten["direkt"] = f"ein privates Gespräch mit beiden Seiten; meine Nachrichten stehen unter @{einheit['konto']}"
     zeilen = [
         f"Du bekommst {arten[einheit['art']]}, vom Konto @{einheit['konto']}, {einheit['von'][:10]}.",
         f"Vorhandene Hashtags: {', '.join(einheit['hashtags']) or 'keine'}",
@@ -256,7 +261,7 @@ def main():
     for e in einheiten:
         if e["kennung"] in erledigt:
             continue
-        namen = [Path(bild["datei"]).name for b in e["beitraege"] for bild in b["bilder"]]
+        namen = [Path(bild["datei"]).name for b in e["beitraege"] for bild in b["bilder"] if bild["typ"] in BILDTYPEN]
         if all(n in abgeschrieben for n in namen):
             bereit.append(e)
         else:
@@ -289,6 +294,14 @@ def main():
             print("Stoppsignal erkannt.")
             stoppdatei.unlink(missing_ok=True)
             break
+        if einheit["art"] == "geteilt":
+            ergebnis = {"titel": einheit.get("titel") or "Geteilt", "hashtags_neu": [], "lesefassung": "",
+                        "sekunden": 0, "gruende": [], "modell": ""}
+            (ziel / f"{einheit['kennung']}.json").write_text(json.dumps(ergebnis, ensure_ascii=False, indent=1),
+                                                             encoding="utf-8")
+            anzahl += 1
+            print(f"  {anzahl}: {einheit['bereich']} ohne Modell „{ergebnis['titel']}“", flush=True)
+            continue
         abkuehlen(einst)
         text, worte = quelltext(einheit, abschriften, kopf)
         mit_lesefassung = (einheit["art"] in ("zettel", "notiz") and worte <= LESEFASSUNG_BIS_WOERTER

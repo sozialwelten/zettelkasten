@@ -4,6 +4,9 @@ Aufruf:
   .venv/bin/python schreiben.py --probe 3         je Bereich 3 Notizen nach DATEN/probe-vault/, der Vault bleibt unberührt
   .venv/bin/python schreiben.py                   alle fertigen Einheiten in den Vault schreiben
   .venv/bin/python schreiben.py --stand           nur zählen
+  .venv/bin/python schreiben.py --probe 3 --roh --plattform twitter
+                                                  Probe ohne Anreicherung, Titel aus den ersten Wörtern;
+                                                  zeigt den Aufbau, bevor das Modell gelaufen ist
 
 Fertig ist eine Einheit, wenn sie angereichert ist (anreichern.py). Geschrieben wird jede Einheit genau einmal.
 Welche Datei zu welcher Einheit gehört, steht in DATEN/geschrieben.json. Eine geschriebene Notiz rührt das
@@ -44,19 +47,38 @@ def dateiname(titel):
     return name[:100] or "Ohne Titel"
 
 
+def roh_titel(einheit):
+    """Titel aus den ersten Wörtern, für Proben ohne Anreicherung."""
+    text = next((b["text"] for b in einheit["beitraege"] if b["text"]), "") or einheit["art"]
+    worte = re.sub(r"https?://\S+|@\S+", "", text.split("\n", 1)[0])
+    worte = re.sub(r"[^\w\säöüÄÖÜß-]", "", worte).split()
+    return " ".join(worte[:8])[:60].strip() or einheit["art"]
+
+
 def als_notiz(einheit, anreicherung, abschriften, kopf):
     bereich = anreicherung.get("bereich", einheit["bereich"])
     beginn, ende = datetime.fromisoformat(einheit["von"]), datetime.fromisoformat(einheit["bis"])
     zeitraum = f"{beginn:%d.%m.%Y}" + (f" bis {ende:%d.%m.%Y}" if ende.date() != beginn.date() else "")
-    zeilen = [" · ".join([bereich, f"@{einheit['konto']}", zeitraum, f"[Original]({einheit['beitraege'][0]['url']})"])]
+    konto = f"@{einheit['konto']}" + (" (Twitter)" if einheit.get("plattform") == "twitter" else "")
+    kopf = [bereich, konto, zeitraum]
+    if einheit["beitraege"][0]["url"]:
+        kopf.append(f"[Original]({einheit['beitraege'][0]['url']})")
+    zeilen = [" · ".join(kopf)]
+    if einheit.get("gruppenname"):
+        zeilen.append(f"Gruppe: {einheit['gruppenname']}")
     if einheit["partner"]:
         zeilen.append("Mit: " + ", ".join(f"[{p['name']}]({p['href']})" if p["href"] else p["name"]
                                           for p in einheit["partner"]))
+    if einheit.get("kontext"):
+        zeilen += ["", "Kurz davor geteilt:"]
+        for k in einheit["kontext"]:
+            zeilen += [f"> **@{k['autor']}**: " + k["text"].replace("\n", "\n> ")]
     mehrere = len(einheit["beitraege"]) > 1
     for b in einheit["beitraege"]:
         zeilen.append("")
-        if mehrere:
-            zeilen += [f"**{datetime.fromisoformat(b['zeit']):%d.%m.%Y %H:%M}**", ""]
+        if mehrere or b.get("absender"):
+            zeilen += [f"**{datetime.fromisoformat(b['zeit']):%d.%m.%Y %H:%M}**"
+                       + (f" · {b['absender']}" if b.get("absender") else ""), ""]
         if b["inhaltswarnung"]:
             zeilen += [f"Inhaltswarnung: {b['inhaltswarnung']}", ""]
         if b["text"]:
@@ -89,7 +111,11 @@ def main():
     parser = argparse.ArgumentParser(description="Angereicherte Einheiten in den Vault schreiben")
     parser.add_argument("--probe", type=int, metavar="N", help="je Bereich N Notizen in einen Probe-Vault")
     parser.add_argument("--stand", action="store_true", help="nur zählen")
+    parser.add_argument("--roh", action="store_true", help="mit --probe: auch Einheiten ohne Anreicherung")
+    parser.add_argument("--plattform", choices=["mastodon", "twitter"], help="nur Einheiten dieser Plattform")
     args = parser.parse_args()
+    if args.roh and not args.probe:
+        raise SystemExit("--roh geht nur zusammen mit --probe.")
 
     konf = lade_konfiguration()
     daten = Path(konf["pfade"]["daten"])
@@ -100,7 +126,9 @@ def main():
     anreicherungen = {p.name.removesuffix(".json"): p for p in (daten / "anreicherung").glob("*.json")}
     with open(daten / "einheiten.jsonl", encoding="utf-8") as f:
         einheiten = [json.loads(z) for z in f]
-    fertig = [e for e in einheiten if e["kennung"] in anreicherungen and e["kennung"] not in register]
+    if args.plattform:
+        einheiten = [e for e in einheiten if e.get("plattform", "mastodon") == args.plattform]
+    fertig = [e for e in einheiten if (args.roh or e["kennung"] in anreicherungen) and e["kennung"] not in register]
     print(f"{len(einheiten)} Einheiten: {len(register)} geschrieben, {len(fertig)} fertig zum Schreiben")
     if args.stand or not fertig:
         return
@@ -112,7 +140,10 @@ def main():
     (vault / ANHAENGE).mkdir(parents=True, exist_ok=True)
     geschrieben = defaultdict(int)
     for einheit in sorted(fertig, key=lambda e: e["von"]):
-        anreicherung = json.loads(anreicherungen[einheit["kennung"]].read_text(encoding="utf-8"))
+        if einheit["kennung"] in anreicherungen:
+            anreicherung = json.loads(anreicherungen[einheit["kennung"]].read_text(encoding="utf-8"))
+        else:
+            anreicherung = {"titel": einheit.get("titel") or roh_titel(einheit), "hashtags_neu": [], "lesefassung": ""}
         bereich, inhalt = als_notiz(einheit, anreicherung, abschriften, kopf)
         if args.probe and je_bereich[bereich] >= args.probe:
             continue
