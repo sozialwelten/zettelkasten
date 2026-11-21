@@ -2,9 +2,10 @@
 """Seiten eines verschwundenen Blogs aus der Wayback Machine holen, je Seite die jüngste Aufnahme.
 
 Aufruf:
-  python3 wayback.py PRÄFIX ZIEL [--auch-feeds] [--pause 1.5]
+  python3 wayback.py PRÄFIX ZIEL [--bis JAHR] [--auch-feeds] [--pause 1.5]
 
-PRÄFIX  Adresse ohne https://, etwa schedulae.ifwo.eu
+PRÄFIX  Adresse ohne https://, etwa schedulae.ifwo.eu oder socioeconomics.info/blog
+--bis   nur Aufnahmen bis einschließlich dieses Jahres, für Seiten, die heute anderen Inhalt haben
 ZIEL    Ordner für die Ergebnisse:
           ZIEL/roh/<pfad>.html   die Seite, wie das Archiv sie gespeichert hat (ohne Wayback-Leiste)
           ZIEL/seiten.json       je Seite Adresse, Datum der Aufnahme, Titel, Veröffentlichungsdatum, Text
@@ -43,9 +44,12 @@ def hole(url, versuche=4):
             time.sleep(10 * (versuch + 1))
 
 
-def aufnahmen(praefix, auch_feeds):
-    abfrage = urllib.parse.urlencode({"url": praefix + "/*", "output": "json", "filter": ["statuscode:200"],
-                                      "fl": "timestamp,original,mimetype"}, doseq=True)
+def aufnahmen(praefix, auch_feeds, bis=None):
+    felder = {"url": praefix + "/*", "output": "json", "filter": ["statuscode:200"],
+              "fl": "timestamp,original,mimetype"}
+    if bis:
+        felder["to"] = str(bis)
+    abfrage = urllib.parse.urlencode(felder, doseq=True)
     zeilen = json.loads(hole(f"{CDX}?{abfrage}"))[1:]
     juengste = {}
     for zeitstempel, original, typ in zeilen:
@@ -114,12 +118,13 @@ def main():
     ap.add_argument("ziel", type=Path)
     ap.add_argument("--auch-feeds", action="store_true", help="auch Feeds und andere Dateitypen holen")
     ap.add_argument("--pause", type=float, default=1.5, help="Sekunden zwischen zwei Abrufen")
+    ap.add_argument("--bis", type=int, metavar="JAHR", help="nur Aufnahmen bis einschließlich dieses Jahres")
     args = ap.parse_args()
     praefix = re.sub(r"^https?://", "", args.praefix).rstrip("/")
     roh = args.ziel / "roh"
     roh.mkdir(parents=True, exist_ok=True)
 
-    liste = aufnahmen(praefix, args.auch_feeds)
+    liste = aufnahmen(praefix, args.auch_feeds, args.bis)
     print(f"{len(liste)} Seiten im Archiv unter {praefix}", flush=True)
     seiten = []
     for nr, (pfad, (zeitstempel, original)) in enumerate(liste.items(), 1):
