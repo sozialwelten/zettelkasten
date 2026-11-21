@@ -89,8 +89,16 @@ def verkleinert(rohdaten, kante):
     return base64.b64encode(puffer.getvalue()).decode()
 
 
-def frage_bildmodell(konf, bild_b64):
+class Wiederholung(RuntimeError):
+    """Das Modell verfängt sich bei diesem Bild in einer Schleife; liegt am Bild, nicht an Ollama."""
+
+
+def frage_bildmodell(konf, bild_b64, gegen_schleife=False):
     ollama = konf["ollama"]
+    optionen = {"temperature": 0}
+    if gegen_schleife:
+        # etwas Zufall und eine Strafe für Wiederholungen, damit das Modell aus der Schleife herausfindet
+        optionen = {"temperature": 0.3, "repeat_penalty": 1.15}
     beginn = time.monotonic()
     antwort = requests.post(
         f"{ollama['adresse']}/api/chat",
@@ -100,13 +108,16 @@ def frage_bildmodell(konf, bild_b64):
             "stream": False,
             "think": False,
             "format": SCHEMA,
-            "options": {"temperature": 0},
+            "options": optionen,
             "keep_alive": "10m",
         },
         timeout=600,
     )
     if not antwort.ok:
-        raise RuntimeError(f"Ollama meldet {antwort.status_code}: {antwort.text[:300]}")
+        meldung = f"Ollama meldet {antwort.status_code}: {antwort.text[:300]}"
+        if "repeat" in antwort.text or "prediction aborted" in antwort.text:
+            raise Wiederholung(meldung)
+        raise RuntimeError(meldung)
     inhalt = antwort.json()["message"].get("content", "")
     try:
         ergebnis = json.loads(inhalt)
@@ -196,14 +207,20 @@ def main():
             try:
                 ergebnis = frage_bildmodell(konf, bild_b64)
             except (RuntimeError, requests.RequestException) as e1:
-                # Zweiter Versuch mit kleinerem Bild; scheitert auch der, wird das Bild vermerkt und übersprungen.
-                print(f"  Fehler bei {name}: {e1}; neuer Versuch mit 1000 Pixeln", flush=True)
+                # Zweiter Versuch mit kleinerem Bild, bei einer Schleife zusätzlich gegen Wiederholungen;
+                # scheitert auch der, wird das Bild vermerkt und übersprungen.
+                schleife = isinstance(e1, Wiederholung)
+                print(f"  Fehler bei {name}: {e1}; neuer Versuch mit 1000 Pixeln"
+                      + (" und Wiederholungsstrafe" if schleife else ""), flush=True)
                 try:
-                    ergebnis = frage_bildmodell(konf, verkleinert(archive[archiv].read(datei), 1000))
+                    ergebnis = frage_bildmodell(konf, verkleinert(archive[archiv].read(datei), 1000), schleife)
                 except (RuntimeError, requests.RequestException) as e2:
                     eintrag = fehler.setdefault(name, {"versuche": 0, "datei": datei, "bereich": bereich})
                     eintrag.update(versuche=eintrag["versuche"] + 1, meldung=str(e2)[:300])
                     fehler_pfad.write_text(json.dumps(fehler, ensure_ascii=False, indent=1), encoding="utf-8")
+                    if isinstance(e2, Wiederholung):
+                        # liegt am Bild: nicht als Ausfall von Ollama zählen, sondern weitermachen
+                        continue
                     hintereinander += 1
                     if hintereinander >= 5:
                         print("Fünf Fehler hintereinander, Lauf beendet. Läuft Ollama noch?")
