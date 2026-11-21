@@ -2,7 +2,7 @@
 
 Werkzeug, das einen auf mehrere Mastodon-Konten verteilten Zettelkasten aus den Konto-Exporten in einen gemeinsamen, durchsuchbaren Obsidian-Vault überführt. Bilder werden lokal abgeschrieben, Hashtags und Querverweise ergänzt ein lokales Sprachmodell. Später schickt das Werkzeug alte Zettel als überraschende Fundstücke zurück.
 
-Alles läuft auf einem eigenen Rechner. Kein Text und kein Bild geht an einen externen KI-Dienst. Der Code ist mit Hilfe eines KI-Assistenten entstanden und wird von Hand getestet.
+Alles läuft auf einem eigenen Rechner. Kein Text und kein Bild geht an einen externen KI-Dienst, mit einer bewussten Ausnahme: handschriftliche Karteikarten (siehe „Physische Karten“). Der Code ist mit Hilfe eines KI-Assistenten entstanden und wird von Hand getestet.
 
 ## Stand
 
@@ -13,6 +13,8 @@ Gebaut sind alle Stufen bis zum Vault:
 3. `abschreiben.py` schreibt die Bilder mit dem Bildmodell ab.
 4. `anreichern.py` lässt das Sprachmodell Titel, Bereich, zusätzliche Hashtags und eine Lesefassung vorschlagen und prüft sie.
 5. `schreiben.py` schreibt fertige Einheiten als Notizen in den Vault.
+
+Dazu kommen `twitter.py` für die Twitter-Archive und `karten.py` für Fotos physischer Karteikarten.
 
 Noch nicht gebaut: Querverweise, Colloquium-Notizen, Zufallsfunde.
 
@@ -49,6 +51,32 @@ python3 exporte_pruefen.py ORDNER [ORDNER ...]          ältere gegen den neuest
 python3 exporte_pruefen.py ALT.zip NEU.zip --liste      alle Beiträge, die nur im alten stehen
 ```
 
+## Twitter
+
+Die Twitter-Archive von 2020 liegen als Zip-Dateien in dem Ordner, den `[pfade] twitter` nennt, je Konto zählt das jüngste. `twitter.py` macht daraus Einheiten nach demselben Muster wie bei Mastodon, mit diesen Besonderheiten:
+
+- Antworten an andere enthalten nur die eigene Seite. Die Tweets der anderen stehen nicht im Archiv.
+- Direktnachrichten und Gruppen enthalten beide Seiten, je Gespräch und Monat eine Einheit. Die Namen der Beteiligten kommen aus allen Archiven, sonst steht die Kontonummer da.
+- Reine Retweets werden je Konto und Monat in einer Notiz „Geteilt im …“ gesammelt. Folgt auf einen Retweet innerhalb von 15 Minuten ein eigener Tweet, steht der Retweet als „Kurz davor geteilt“ in dessen Notiz.
+- t.co-Links werden aufgelöst. Links auf Twitter selbst gibt es nicht mehr, weil die Konten gelöscht sind.
+- Bilder gehen durch die Abschrift, Videos und GIFs kommen als Datei in den Vault.
+- Bei den Konten aus `[twitter] zettelkonten` wird alles Eigene ein Zettel, auch ohne Hashtag.
+
+`twitter_struktur.py ORDNER` zeigt den Aufbau der Archive, ohne Inhalte auszugeben.
+
+## Physische Karten
+
+Ein Teil des Zettelkastens existiert nur auf Papier: handschriftliche Karteikarten, nummeriert nach Luhmanns Art (etwa `2/15a`). Die längeren Texte dazu lagen früher bei TwitLonger und sind dort verloren. Die Karten werden einzeln auf grüner Unterlage fotografiert, Vorder- und Rückseite direkt nacheinander.
+
+`karten.py` bereitet die Fotos auf. Aus CR2-Dateien nimmt es das eingebettete JPG, die Rohdatei bleibt unverändert. Zugeschnitten wird über die grüne Unterlage: Zeilen und Spalten mit viel Nicht-Grün gehören zur Karte.
+
+```
+.venv/bin/python karten.py QUELLE ZIEL               ZIEL/karte/ volle Auflösung, ZIEL/klein/ längste Kante 1600 Pixel
+.venv/bin/python karten.py QUELLE ZIEL --kante 2000  andere Kantenlänge für die kleine Fassung
+```
+
+Handschrift liest das lokale Bildmodell nicht zuverlässig genug. Die Karten werden deshalb mit Claude abgeschrieben. Es sind Exzerpte und eigene Gedanken zu Fachtexten, nichts Persönliches. Das ist die einzige Stelle, an der Inhalte des Zettelkastens einen externen Dienst sehen.
+
 ## Einheiten
 
 | Art | Was | Bereich |
@@ -58,6 +86,7 @@ python3 exporte_pruefen.py ALT.zip NEU.zip --liste      alle Beiträge, die nur 
 | beitrag | eigener öffentlicher Beitrag oder Thread ohne Hashtags | Gespräch |
 | antwort | meine Antworten an andere in einem Gespräch | Gespräch |
 | direkt | Gespräch per Direktnachricht | Gespräch/Direkt |
+| geteilt | Retweets eines Monats (nur Twitter) | Gespräch/Geteilt |
 
 Ein Thread ist eine Einheit, ebenso ein Gespräch. Beiträge, deren Kette auf einen fremden Beitrag zurückgeht, gehören zu den Antworten, auch wenn sie im selben Gespräch stehen wie ein eigener Thread.
 
