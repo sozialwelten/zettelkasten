@@ -107,8 +107,8 @@ def als_notiz(einheit, anreicherung, abschriften, kopf):
             elif daten.get("beschreibung") and not bild["beschreibung"]:
                 zeilen.append(f"Bild: {daten['beschreibung']}")
     if einheit.get("verweis_titel"):
-        # &nbsp; als leerer Absatz: Obsidian setzt nach eingebetteten Bildern sonst kaum Abstand
-        zeilen += ["", "&nbsp;", "", "Verweise: " + ", ".join(f"[[{dateiname(t)}]]" for t in einheit["verweis_titel"])]
+        # <br> als zusätzlicher Abstand: Obsidian setzt nach eingebetteten Bildern sonst kaum Luft
+        zeilen += ["", "<br>", "", "Verweise: " + ", ".join(f"[[{dateiname(t)}]]" for t in einheit["verweis_titel"])]
     if anreicherung.get("lesefassung"):
         zeilen += ["", "---", "", "**Lesefassung**", "", anreicherung["lesefassung"]]
     hashtags, gesehen = [], set()

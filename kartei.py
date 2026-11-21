@@ -70,6 +70,9 @@ def lies_karten(konf, daten):
             if not marke.exists():
                 marke.write_text(json.dumps({"uebersprungen": "karte, Abschrift steht im Text"}), encoding="utf-8")
         nummer = karte["nummer"]
+        text = "\n".join(karte["abschrift"])
+        # Vor der ersten Vgl.-Zeile ein Absatz, sonst hängt Markdown sie an den letzten Spiegelstrich
+        text = re.sub(r"(?<!\n)\n(?=[Vv]gl\b)", "\n\n", text, count=1)
         einheiten.append({
             "kennung": f"karte-{k['konto']}-{nummer.replace('/', '-')}", "konto": k["konto"], "plattform": "karte",
             "archiv": str(ordner), "art": "zettel", "bereich": k["bereich"], "von": "", "bis": "",
@@ -79,7 +82,7 @@ def lies_karten(konf, daten):
             "beitraege": [{"id": nummer, "url": "", "zeit": "", "sichtbarkeit": "", "antwort_auf": None,
                            "an_andere": False, "gespraech": "",
                            # spitze Klammern stehen für Spencer-Browns Haken; Obsidian soll sie nicht als HTML lesen
-                           "text": "\n".join(karte["abschrift"]).replace("<", "\\<"),
+                           "text": text.replace("<", "\\<"),
                            "hashtags": [], "links": [], "partner": [], "empfaenger": False, "inhaltswarnung": "",
                            "bilder": bilder, "vorschauen": 0}],
         })
