@@ -18,6 +18,7 @@ Eine Einheit ist das, was später eine Notiz wird:
   direkt   Gespräch per Direktnachricht mit anderen, nur die Nachrichten mit Empfänger
 
 Twitter: Ist [pfade] twitter gesetzt, kommen die Twitter-Archive dazu (siehe twitter.py).
+Karten: Ist [karten] gesetzt, kommen abgeschriebene Karteikarten dazu (siehe kartei.py).
 
 Bereich: bei den thematischen Konten vom Konto. Bei @sozialwelten gehen antwort und beitrag nach
 „Gespräch“, direkt nach „Gespräch/Direkt“. zettel und notiz aus @sozialwelten bekommen den Bereich
@@ -261,6 +262,14 @@ def lies_archiv(archiv, bereiche):
     return konto, einheiten
 
 
+def lies_datei(archiv, datei):
+    """Datei aus einem Zip-Archiv oder, bei abfotografierten Karten, aus einem Ordner."""
+    if Path(archiv).is_dir():
+        return (Path(archiv) / datei).read_bytes()
+    with zipfile.ZipFile(archiv) as z:
+        return z.read(datei)
+
+
 # Probe als Markdown
 
 def dateiname(einheit):
@@ -321,10 +330,9 @@ def schreibe_probe(einheiten, ordner, anzahl):
             if namen[name] > 1:
                 name += f" {namen[name]}"
             (ziel / f"{name}.md").write_text(als_markdown(einheit), encoding="utf-8")
-            with zipfile.ZipFile(einheit["archiv"]) as z:
-                for b in einheit["beitraege"]:
-                    for bild in b["bilder"]:
-                        (anhaenge / Path(bild["datei"]).name).write_bytes(z.read(bild["datei"]))
+            for b in einheit["beitraege"]:
+                for bild in b["bilder"]:
+                    (anhaenge / Path(bild["datei"]).name).write_bytes(lies_datei(einheit["archiv"], bild["datei"]))
     return sum(len(v) for v in gewaehlt.values())
 
 
@@ -358,6 +366,12 @@ def main():
             arten = Counter(e["art"] for e in einheiten)
             print(f"  {konto} (Twitter): {len(einheiten)} Einheiten: "
                   + ", ".join(f"{n} {a}" for a, n in arten.most_common()))
+
+    if konf.get("karten") and not args.archive:
+        from kartei import lies_karten, verbinde
+        karten = lies_karten(konf, daten)
+        alle, aufgegangen = verbinde(alle, karten, konf)
+        print(f"  Karten: {len(karten)} Einheiten, {aufgegangen} Tweets gehen in Karten oder Zetteln auf")
 
     with open(daten / "einheiten.jsonl", "w", encoding="utf-8") as f:
         for einheit in alle:

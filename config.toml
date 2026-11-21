@@ -19,6 +19,14 @@ verein = "Verein"
 waldbau = "Waldbau"
 oikos = "Oikos"
 
+# Abfotografierte und abgeschriebene Karteikarten (siehe kartei.py und karten.py)
+[karten]
+ordner = "/mnt/daten/zettelkasten/karten"
+abschrift = "schedulae_karten.json"
+konto = "schedulae"                      # Twitter-Konto, auf dem die Karten erschienen sind
+bereich = "Soziologie"
+konten_mit_karten = ["soziologie"]       # Mastodon-Konten, auf denen Karten schon als Zettel stehen
+
 [ollama]
 adresse = "http://localhost:11434"
 modell = "qwen3:32b"

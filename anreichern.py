@@ -219,6 +219,8 @@ def pruefe(einheit, roh, text, einst):
         neue.append(h)
     titel = " ".join(str(roh.get("titel", "")).replace("/", " ").split()).strip(" .:;")
     titel = trenne_woerter(titel, einheit, text) or einheit["art"]
+    if einheit.get("plattform") == "karte":
+        titel = einheit["titel"]  # Karteikarten tragen ihren Titel selbst
     ergebnis = {"titel": titel[:90], "hashtags_neu": neue}
     if einheit["bereich"] == "offen":
         bereich = roh.get("bereich", "ungeordnet")

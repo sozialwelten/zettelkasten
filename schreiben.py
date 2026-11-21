@@ -59,11 +59,21 @@ def als_notiz(einheit, anreicherung, abschriften, kopf):
     bereich = anreicherung.get("bereich", einheit["bereich"])
     beginn, ende = datetime.fromisoformat(einheit["von"]), datetime.fromisoformat(einheit["bis"])
     zeitraum = f"{beginn:%d.%m.%Y}" + (f" bis {ende:%d.%m.%Y}" if ende.date() != beginn.date() else "")
-    konto = f"@{einheit['konto']}" + (" (Twitter)" if einheit.get("plattform") == "twitter" else "")
+    plattform = {"twitter": " (Twitter)", "karte": " (Karteikarte)"}.get(einheit.get("plattform"), "")
+    konto = f"@{einheit['konto']}{plattform}"
+    if einheit.get("plattform") == "karte":
+        zeitraum = "undatiert" if einheit.get("datum_geschaetzt") else zeitraum
     kopf = [bereich, konto, zeitraum]
+    if einheit.get("karte"):
+        kopf.insert(1, f"Karte {einheit['karte']}")
     if einheit["beitraege"][0]["url"]:
         kopf.append(f"[Original]({einheit['beitraege'][0]['url']})")
     zeilen = [" · ".join(kopf)]
+    if einheit.get("herkunft"):
+        zeilen.append(einheit["herkunft"])
+    if einheit.get("getwittert"):
+        tage = list(dict.fromkeys(f"{datetime.fromisoformat(z):%d.%m.%Y}" for z in einheit["getwittert"]))
+        zeilen.append("Getwittert auf @schedulae: " + ", ".join(tage))
     if einheit.get("gruppenname"):
         zeilen.append(f"Gruppe: {einheit['gruppenname']}")
     if einheit["partner"]:
@@ -112,7 +122,7 @@ def main():
     parser.add_argument("--probe", type=int, metavar="N", help="je Bereich N Notizen in einen Probe-Vault")
     parser.add_argument("--stand", action="store_true", help="nur zählen")
     parser.add_argument("--roh", action="store_true", help="mit --probe: auch Einheiten ohne Anreicherung")
-    parser.add_argument("--plattform", choices=["mastodon", "twitter"], help="nur Einheiten dieser Plattform")
+    parser.add_argument("--plattform", choices=["mastodon", "twitter", "karte"], help="nur Einheiten dieser Plattform")
     args = parser.parse_args()
     if args.roh and not args.probe:
         raise SystemExit("--roh geht nur zusammen mit --probe.")
@@ -162,6 +172,9 @@ def main():
             for bild in b["bilder"]:
                 ziel = vault / ANHAENGE / Path(bild["datei"]).name
                 if not ziel.exists():
+                    if Path(einheit["archiv"]).is_dir():
+                        ziel.write_bytes((Path(einheit["archiv"]) / bild["datei"]).read_bytes())
+                        continue
                     if einheit["archiv"] not in archive:
                         archive[einheit["archiv"]] = zipfile.ZipFile(einheit["archiv"])
                     ziel.write_bytes(archive[einheit["archiv"]].read(bild["datei"]))
