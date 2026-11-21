@@ -127,6 +127,17 @@ Die Abschrift schreibt je Bild eine JSON-Datei nach `DATEN/abschriften/` und mac
 
 Pfade und die Bereiche der thematischen Konten stehen in `config.toml`.
 
+## Alte Blogs aus dem Webarchiv
+
+`wayback.py` holt die Seiten eines verschwundenen Blogs aus der Wayback Machine, je Seite die jüngste Aufnahme. `blogtexte.py` liest daraus die Beiträge samt Kommentaren und schreibt je Beitrag eine Notiz für Obsidian.
+
+```
+.venv/bin/python wayback.py socioeconomics.info/blog DATEN/wayback/socioeconomics --bis 2014
+.venv/bin/python blogtexte.py DATEN/wayback/socioeconomics --name "SocioEconomics Blog"
+```
+
+Erkannt werden drei Bauarten von WordPress-Themes (Twenty Ten und neuere mit `entry-content`, das MH-Theme mit `post-title`, das Theme von Perun mit `storycontent`). Einzelseiten gehen vor Monatsarchiven und Übersichten. Gibt es einen Beitrag nur in einer Übersicht, wird sein Anfang übernommen und als Anriss gekennzeichnet. Seiten anderer Bauart, etwa eine ältere statische Homepage unter derselben Adresse, bleiben als Rohseite liegen. Mit `--bis` lassen sich Aufnahmen aus der Zeit nach dem Ende des Blogs ausschließen, etwa geparkte Domains.
+
 ## Aufräumen eines Kontos
 
 `aufraeumen.py` löscht freistehende Beiträge ohne Hashtag und ohne Erwähnung aus einem Mastodon-Konto, etwa um ein gemischt genutztes Konto auszudünnen. Die Auswahl kommt aus den eingelesenen Einheiten, die Beiträge bleiben also im Export und im Zettelkasten erhalten.
