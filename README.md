@@ -68,6 +68,10 @@ Direktnachrichten nennen nur Kontonummern. Namen, die in keinem Archiv stehen, k
 
 `twitter_struktur.py ORDNER` zeigt den Aufbau der Archive, ohne Inhalte auszugeben.
 
+## Facebook
+
+Ein Facebook-Export im HTML-Format ist noch nicht eingebunden. `facebook_struktur.py EXPORT.zip` zeigt seinen Aufbau, ohne Inhalte auszugeben: je Bereich die Dateien und für einige Beispiele den HTML-Baum mit Tags und Klassen. Texte erscheinen nur als Länge, außer Datumsangaben und Pfaden von Bildern. Nachrichten (`messages/`) öffnet das Skript nie. Mit `--bereiche` lassen sich die Bereiche wählen, etwa `posts comments photos_and_videos`.
+
 ## Physische Karten
 
 Ein Teil des Zettelkastens existiert nur auf Papier: handschriftliche Karteikarten, nummeriert nach Luhmanns Art (etwa `2/15a`). Die längeren Texte dazu lagen früher bei TwitLonger und sind dort verloren. Die Karten werden einzeln auf grüner Unterlage fotografiert, Vorder- und Rückseite direkt nacheinander.
